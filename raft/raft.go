@@ -11,10 +11,10 @@ import (
 )
 
 type Application interface {
-	applyEntry(entry *raftpd.Entry)
-	readStateNotice(idx uint64, bytes []byte)
-	applySnapshot(snapshot *raftpd.Snapshot)
-	readSnapshot() *raftpd.Snapshot
+	ApplyEntry(entry *raftpd.Entry)
+	ReadStateNotice(idx uint64, bytes []byte)
+	ApplySnapshot(snapshot *raftpd.Snapshot)
+	ReadSnapshot() *raftpd.Snapshot
 }
 
 type Raft struct {
@@ -30,9 +30,12 @@ type Raft struct {
 	transport    Transport
 }
 
-func MakeRaft(id uint64, nodes []uint64,
-	electionTimeout, heartbeatTimeout int, tickSize int,
-	walDir string, application Application, transport Transport) (*Raft, error) {
+func MakeRaft(id uint64,
+	nodes []uint64,
+	electionTimeout, heartbeatTimeout, tickSize int,
+	walDir string,
+	application Application,
+	transport Transport) (*Raft, error) {
 	raft := &Raft{id: id}
 	raft.callback = application
 	raft.transport = transport
@@ -47,7 +50,7 @@ func MakeRaft(id uint64, nodes []uint64,
 		Entries:       nil,
 	}
 
-	raft.raft = core.MakeRaft(&config, application)
+	raft.raft = core.MakeRaft(&config, raft)
 
 	w, err := wal.CreateWal(walDir, core.InvalidIndex+1)
 	if err != nil {
@@ -60,9 +63,13 @@ func MakeRaft(id uint64, nodes []uint64,
 	return raft, nil
 }
 
-func RebuildRaft(id uint64, logSequenceNumber uint64,
-	nodes []uint64, electionTimeout, heartbeatTimeout int, tickSize int,
-	walDir string, application Application, transport Transport) (*Raft, error) {
+func RebuildRaft(id uint64,
+	logSequenceNumber uint64,
+	nodes []uint64,
+	electionTimeout, heartbeatTimeout, tickSize int,
+	walDir string,
+	application Application,
+	transport Transport) (*Raft, error) {
 	w, err := wal.Open(walDir, logSequenceNumber)
 	if err != nil {
 		return nil, err
@@ -85,7 +92,7 @@ func RebuildRaft(id uint64, logSequenceNumber uint64,
 		Nodes:         nodes,
 		Entries:       entries,
 	}
-	raft.raft = core.MakeRaft(&config, application)
+	raft.raft = core.MakeRaft(&config, raft)
 	raft.wal = w
 
 	raft.service(tickSize)
@@ -95,7 +102,8 @@ func RebuildRaft(id uint64, logSequenceNumber uint64,
 
 // Kill is the only one global method no need mutex.
 func (raft *Raft) Kill() {
-	raft.timerStopper <- struct{}
+	var data struct{}
+	raft.timerStopper <- data
 }
 
 // Read operate not sync disk
@@ -134,7 +142,7 @@ func (raft *Raft) handleRaftReady() {
 
 	for i := 0; i < len(ready.CommitEntries); i++ {
 		// FIXME: 是否有必要将更改配置信息应用
-		raft.callback.applyEntry(&ready.CommitEntries[i])
+		raft.callback.ApplyEntry(&ready.CommitEntries[i])
 		if ready.CommitEntries[i].Type == raftpd.EntryConfChange {
 			cc := raftpd.ConfChange{}
 			pd.MustUnmarshal(&cc, ready.CommitEntries[i].Data)
@@ -143,7 +151,7 @@ func (raft *Raft) handleRaftReady() {
 	}
 
 	for i := 0; i < len(ready.ReadStates); i++ {
-		raft.callback.readStateNotice(ready.ReadStates[i].Index,
+		raft.callback.ReadStateNotice(ready.ReadStates[i].Index,
 			ready.ReadStates[i].RequestCtx)
 	}
 
@@ -169,4 +177,12 @@ func (raft *Raft) service(tickSize int) {
 		raft.raft.Periodic(millsSinceLastPeriod)
 		raft.handleRaftReady()
 	})
+}
+
+func (raft *Raft) ApplySnapshot(snapshot *raftpd.Snapshot) {
+	raft.callback.ApplySnapshot(snapshot)
+}
+
+func (raft *Raft) ReadSnapshot() *raftpd.Snapshot {
+	return raft.callback.ReadSnapshot()
 }

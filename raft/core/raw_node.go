@@ -4,6 +4,11 @@ import (
 	"github.com/thinkermao/bior/raft/proto"
 )
 
+type NodeApplication interface {
+	ApplySnapshot(snapshot *raftpd.Snapshot)
+	ReadSnapshot() *raftpd.Snapshot
+}
+
 type Ready struct {
 	// The current volatile state of a Node.
 	// SoftState will be nil if there is no update.
@@ -132,14 +137,9 @@ func (node *RawNode) applyEntry(entry *raftpd.Entry) {
 }
 
 func (node *RawNode) applySnapshot(snapshot *raftpd.Snapshot) {
-	node.application.applySnapshot(snapshot)
+	node.application.ApplySnapshot(snapshot)
 }
 
 func (node *RawNode) readSnapshot() *raftpd.Snapshot {
-	return node.application.readSnapshot()
-}
-
-type NodeApplication interface {
-	applySnapshot(snapshot *raftpd.Snapshot)
-	readSnapshot() *raftpd.Snapshot
+	return node.application.ReadSnapshot()
 }
