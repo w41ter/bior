@@ -1,5 +1,7 @@
 # bior
 
+[![Build Status](https://travis-ci.org/thinkermao/bior.svg?branch=master)](https://travis-ci.org/thinkermao/bior)
+
 Bior is a implements of raft consensus algorithm in go, it supported features:
 
 - Leader Election (vote, pre vote)
