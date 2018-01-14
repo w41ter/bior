@@ -1,13 +1,13 @@
 package raft
 
 import (
+	"github.com/thinkermao/bior/raft/core"
+	"github.com/thinkermao/bior/raft/proto"
+	"github.com/thinkermao/bior/raft/wal"
+	"github.com/thinkermao/bior/utils"
+	"github.com/thinkermao/bior/utils/pd"
 	"sync"
-	"llkv/core/raft/core"
-	"llkv/core/raft/wal"
-	"llkv/core/raft/proto"
-	"llkv/core/utils"
 	"time"
-	"llkv/core/utils/pd"
 )
 
 type Application interface {
@@ -95,7 +95,7 @@ func RebuildRaft(id uint64, logSequenceNumber uint64,
 
 // Kill is the only one global method no need mutex.
 func (raft *Raft) Kill() {
-	raft.timerStopper <- nil
+	raft.timerStopper <- struct{}
 }
 
 // Read operate not sync disk

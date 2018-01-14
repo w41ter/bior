@@ -1,9 +1,9 @@
 package core
 
 import (
-	"raft/proto"
-	"utils"
-	"utils/log"
+	"github.com/thinkermao/bior/raft/proto"
+	"github.com/thinkermao/bior/utils"
+	"github.com/thinkermao/bior/utils/log"
 )
 
 // [offset, lastApplied, commitIndex, stabled, lastIndex)

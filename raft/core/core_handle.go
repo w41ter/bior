@@ -1,9 +1,9 @@
 package core
 
 import (
-	"raft/proto"
-	"utils/log"
-	"utils"
+	"github.com/thinkermao/bior/raft/proto"
+	"github.com/thinkermao/bior/utils"
+	"github.com/thinkermao/bior/utils/log"
 )
 
 func (c *core) stepLeader(msg *raftpd.Message) {
@@ -115,7 +115,7 @@ func (c *core) handleAppendEntries(msg *raftpd.Message) {
 			"from %d [logterm: %d, idx: %d]", c.id, c.term, c.log.commitIndex,
 			msg.From, msg.LogTerm, msg.LogIndex)
 
-		c.log.CommitTo(utils.MinUint64(msg.Index,  idx))
+		c.log.CommitTo(utils.MinUint64(msg.Index, idx))
 		reply.Index = idx
 		reply.Reject = false
 		c.send(&reply)
@@ -354,7 +354,6 @@ func (c *core) sendAppend(node *node) {
 	msg.LogIndex = node.nextIdx - 1
 	msg.LogTerm = c.log.Term(msg.LogIndex)
 
-
 	if c.log.lastIndex() >= node.nextIdx {
 		entries := c.log.Slice(node.nextIdx, c.log.lastIndex()+1)
 		// slice message with max size
@@ -419,7 +418,7 @@ func (c *core) sendSnapshot(node *node) {
 
 	node.sendSnapshot(snapshot.Metadata.Index)
 
-	log.Infof("%x paused sending replication messages to %x", c.id, node.id);
+	log.Infof("%x paused sending replication messages to %x", c.id, node.id)
 	msg.Snapshot = snapshot
 	msg.MsgType = raftpd.MsgSnapshotRequest
 

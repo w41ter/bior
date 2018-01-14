@@ -1,8 +1,8 @@
 package core
 
 import (
-	"utils"
-	"utils/log"
+	"github.com/thinkermao/bior/utils"
+	"github.com/thinkermao/bior/utils/log"
 )
 
 //  					  +--------------------------------------------------------+
@@ -58,12 +58,12 @@ import (
 type nodeState int
 
 const (
-	nodeStateProbe     nodeState = iota
+	nodeStateProbe nodeState = iota
 	nodeStateReplicate
 	nodeStateSnapshot
 )
 
-var StateString = []string {
+var StateString = []string{
 	"Probe",
 	"Replicate",
 	"Snapshot",
@@ -151,7 +151,7 @@ func (i *InFlights) reset() {
 type voteState int
 
 const (
-	voteNone    voteState = iota
+	voteNone voteState = iota
 	voteReject
 	voteGranted
 )

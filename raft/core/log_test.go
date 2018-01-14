@@ -3,7 +3,7 @@ package core
 import "testing"
 import (
 	"fmt"
-	"raft/proto"
+	"github.com/thinkermao/bior/raft/proto"
 )
 
 func makeEntry(idx, term uint64) raftpd.Entry {
@@ -194,7 +194,7 @@ func TestLogHolder_CompactTo(t *testing.T) {
 
 	tests := []struct {
 		idx, term uint64
-		wants []raftpd.Entry
+		wants     []raftpd.Entry
 	}{
 		// conflict
 		{2, 3, []raftpd.Entry{makeEntry(2, 3)}},

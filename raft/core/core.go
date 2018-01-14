@@ -1,11 +1,11 @@
 package core
 
 import (
+	"github.com/thinkermao/bior/raft/proto"
+	"github.com/thinkermao/bior/utils"
+	"github.com/thinkermao/bior/utils/log"
+	"github.com/thinkermao/bior/utils/pd"
 	"math/rand"
-	"raft/proto"
-	"utils"
-	"utils/pd"
-	"utils/log"
 )
 
 type campaignState int
@@ -45,7 +45,7 @@ type core struct {
 	electionTick           int
 	heartbeatTick          int
 
-	readOnly *readOnly
+	readOnly      *readOnly
 	maxSizePerMsg uint
 }
 
@@ -158,7 +158,7 @@ func (c *core) ApplyConfChange(cc *raftpd.ConfChange) raftpd.ConfState {
 			if c.nodes[i].id != cc.NodeId {
 				continue
 			}
-			for j := i; j + 1 < len(c.nodes); j++ {
+			for j := i; j+1 < len(c.nodes); j++ {
 				c.nodes[j] = c.nodes[j+1]
 			}
 			c.nodes = c.nodes[:len(c.nodes)-1]

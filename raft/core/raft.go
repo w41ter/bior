@@ -1,7 +1,7 @@
 package core
 
 import (
-	"raft/proto"
+	"github.com/thinkermao/bior/raft/proto"
 )
 
 type Raft interface {

@@ -1,9 +1,9 @@
 package core
 
 import (
+	"github.com/thinkermao/bior/raft/proto"
+	"github.com/thinkermao/bior/utils/log"
 	"math"
-	"log"
-	"raft/proto"
 )
 
 const (
@@ -34,8 +34,8 @@ type Config struct {
 
 	MaxSizePreMsg uint
 
-	Nodes       []uint64
-	Entries     []raftpd.Entry
+	Nodes   []uint64
+	Entries []raftpd.Entry
 }
 
 func (c *Config) validate() bool {

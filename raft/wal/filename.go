@@ -1,12 +1,12 @@
 package wal
 
 import (
-	"strings"
-	"fmt"
 	"errors"
-	"log"
+	"fmt"
+	"github.com/thinkermao/bior/utils/log"
 	"os"
 	"sort"
+	"strings"
 )
 
 var (

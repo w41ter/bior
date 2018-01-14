@@ -1,9 +1,6 @@
 package raft
 
-import (
-	"llkv/core/proto"
-	"llkv/core/utils/pd"
-)
+import "github.com/thinkermao/bior/utils/pd"
 
 type Transport interface {
 	Send(msg pd.Message) error

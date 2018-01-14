@@ -1,16 +1,16 @@
 package wal
 
 import (
-	"log"
-	"hash/crc32"
 	"errors"
-	"path/filepath"
-	"os"
+	"github.com/thinkermao/bior/raft/proto"
+	"github.com/thinkermao/bior/raft/wal/proto"
+	"github.com/thinkermao/bior/utils"
+	"github.com/thinkermao/bior/utils/log"
+	"github.com/thinkermao/bior/utils/pd"
+	"hash/crc32"
 	"io"
-	"raft/proto"
-	"utils"
-	"raft/wal/proto"
-	"utils/pd"
+	"os"
+	"path/filepath"
 )
 
 const (
@@ -129,7 +129,7 @@ func (wal *Wal) ReadAll() (state raftpd.HardState, entries []raftpd.Entry, err e
 		case RecordState:
 			pd.MustMarshal(&state)
 		default:
-			log.Panic("open file with unkonwn record type")
+			log.Panicf("open file with unkonwn record type")
 		}
 	}
 

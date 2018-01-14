@@ -1,7 +1,7 @@
 package core
 
 import (
-	"raft/proto"
+	"github.com/thinkermao/bior/raft/proto"
 )
 
 type Ready struct {
@@ -45,9 +45,9 @@ type RawNode struct {
 	prevHS raftpd.HardState
 	prevSS SoftState
 
-	readStates []ReadState
+	readStates    []ReadState
 	commitEntries []raftpd.Entry
-	messages []raftpd.Message
+	messages      []raftpd.Message
 
 	application NodeApplication
 }
@@ -92,7 +92,7 @@ func (node *RawNode) Step(msg *raftpd.Message) {
 }
 
 func (node *RawNode) Ready() Ready {
-	ready := Ready{ }
+	ready := Ready{}
 
 	ss := node.raft.ReadSoftState()
 	if ss != node.prevSS {

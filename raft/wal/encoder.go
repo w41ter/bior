@@ -1,9 +1,9 @@
 package wal
 
 import (
+	"github.com/thinkermao/bior/raft/wal/proto"
+	"github.com/thinkermao/bior/utils/pd"
 	"os"
-	"raft/wal/proto"
-	"utils/pd"
 )
 
 type encoder struct {

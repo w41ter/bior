@@ -1,12 +1,12 @@
 package wal
 
 import (
-	"os"
 	"bufio"
-	"io"
 	"encoding/binary"
-	"raft/wal/proto"
-	"utils/pd"
+	"github.com/thinkermao/bior/raft/wal/proto"
+	"github.com/thinkermao/bior/utils/pd"
+	"io"
+	"os"
 )
 
 const frameSizeBytes = 8
