@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"github.com/thinkermao/bior/raft/wal/proto"
 	"github.com/thinkermao/bior/utils/pd"
+	"hash/crc32"
 	"io"
 	"os"
 )
@@ -59,6 +60,11 @@ func (d *decoder) decode(record *walpd.Record) error {
 	}
 	if err := pd.Unmarshal(record, data[:length]); err != nil {
 		return err
+	}
+
+	crc := crc32.Checksum(record.Data, crcTable)
+	if record.Crc != crc {
+		return ErrCRCMismatch
 	}
 
 	// record decoded as valid; point last valid offset to end of record

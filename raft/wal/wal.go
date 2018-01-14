@@ -20,16 +20,15 @@ const (
 )
 
 var (
-	SegmentSize int64 = 64 * 1000 * 1000 // 64MB
-	crcTable          = crc32.MakeTable(crc32.Castagnoli)
-)
-var (
 	// SegmentSizeBytes is the preallocated size of each wal segment file.
 	// The actual size might be larger than this. In general, the default
 	// value should be used, but this is defined as an exported variable
 	// so that tests can set a different segment size.
 	SegmentSizeBytes int64 = 64 * 1000 * 1000 // 64MB
+	crcTable               = crc32.MakeTable(crc32.Castagnoli)
+)
 
+var (
 	ErrMetadataConflict = errors.New("wal: conflicting metadata found")
 	ErrFileNotFound     = errors.New("wal: file not found")
 	ErrCRCMismatch      = errors.New("wal: crc mismatch")
@@ -47,8 +46,15 @@ type Wal struct {
 	dec *decoder
 }
 
+// TODO: add lock support for files.
 func CreateWal(walDir string, firstIndex uint64) (*Wal, error) {
-	// TODO: check exists file
+	if err := clearAllFilesEndsWith(walDir, ".wal"); err != nil {
+		return nil, err
+	}
+	if err := clearAllFilesEndsWith(walDir, ".tmp"); err != nil {
+		return nil, err
+	}
+
 	name := filepath.Join(walDir, walName(0, 0))
 
 	files := make([]*os.File, 0)
@@ -74,6 +80,10 @@ func CreateWal(walDir string, firstIndex uint64) (*Wal, error) {
 
 // Open for write
 func Open(walDir string, lsn uint64) (*Wal, error) {
+	// remove all stale tmp files
+	if err := clearAllFilesEndsWith(walDir, ".tmp"); err != nil {
+		return nil, err
+	}
 	names, err := readAllWalNames(walDir)
 	if err != nil {
 		return nil, err
@@ -104,7 +114,6 @@ func Open(walDir string, lsn uint64) (*Wal, error) {
 		files:          files,
 	}
 
-	// FIXME:
 	wal.dec = makeDecoder(wal.files)
 
 	return wal, nil
@@ -134,13 +143,14 @@ func (wal *Wal) ReadAll() (state raftpd.HardState, entries []raftpd.Entry, err e
 	}
 
 	/* translate to encode mode */
-	if wal.closer != nil {
-		wal.closer()
-		wal.closer = nil
-	}
 	wal.dec = nil
 
 	// TODO: tail file must exists
+	// TODO: Check EOF
+	// Seek to end of file
+	if _, err = wal.tailFile().Seek(0, 2); err != nil {
+		return
+	}
 	wal.enc = makeEncoder(wal.tailFile())
 
 	return
@@ -204,9 +214,10 @@ func (wal *Wal) sync() error {
 }
 
 func (wal *Wal) tailFile() *os.File {
-	utils.Assert(len(wal.files) != 0, "file must no empty")
-
-	return wal.files[len(wal.files)-1]
+	if len(wal.files) != 0 {
+		return wal.files[len(wal.files)-1]
+	}
+	return nil
 }
 
 func (wal *Wal) lastSequence() uint64 {

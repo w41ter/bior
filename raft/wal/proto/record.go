@@ -4,7 +4,7 @@ import "encoding/gob"
 
 type Record struct {
 	Type int32
-	Crc  int32
+	Crc  uint32
 	Data []byte
 }
 

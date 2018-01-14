@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/thinkermao/bior/utils/log"
-	"os"
-	"sort"
 	"strings"
 )
 
@@ -16,21 +14,6 @@ var (
 type FileName struct {
 	sequence uint64
 	index    uint64
-}
-
-// readDir returns the filenames in the given directory in sorted order.
-func readDir(dirPath string) ([]string, error) {
-	dir, err := os.Open(dirPath)
-	if err != nil {
-		return nil, err
-	}
-	defer dir.Close()
-	names, err := dir.Readdirnames(-1)
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(names)
-	return names, nil
 }
 
 func parseWalName(str string) (seq, index uint64, err error) {

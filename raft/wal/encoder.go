@@ -3,6 +3,7 @@ package wal
 import (
 	"github.com/thinkermao/bior/raft/wal/proto"
 	"github.com/thinkermao/bior/utils/pd"
+	"hash/crc32"
 	"os"
 )
 
@@ -17,6 +18,7 @@ func makeEncoder(file *os.File) *encoder {
 }
 
 func (e *encoder) encode(record *walpd.Record) error {
+	record.Crc = crc32.Checksum(record.Data, crcTable)
 	bytes, err := pd.Marshal(record)
 	if err != nil {
 		return err
