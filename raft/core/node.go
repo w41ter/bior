@@ -5,55 +5,32 @@ import (
 	"github.com/thinkermao/bior/utils/log"
 )
 
-//  					  +--------------------------------------------------------+
-//						  |                  send snapshot                         |
-//						  |                                                        |
-//				+---------+----------+                                  +----------v---------+
-//			+--->       probe        |                                  |      snapshot      |
-//			|   |  max inflight = 1  <----------------------------------+  max inflight = 0  |
-//			|   +---------+----------+                                  +--------------------+
-//			|             |            1. snapshot success
-//			|             |               (next=snapshot.index + 1)
-//			|             |            2. snapshot failure
-//			|             |               (no change)
-//			|             |            3. receives msgAppResp(rej=false&&index>lastsnap.index)
-//			|             |               (match=m.index,next=match+1)
-//receives msgAppResp(rej=true)
-//(next=match+1)|         |
-//			|             |
-//			|             |
-//			|             |   receives msgAppResp(rej=false&&index>match)
-//			|             |   (match=m.index,next=match+1)
-//			|             |
-//			|             |
-//			|             |
-//			|   +---------v----------+
-//			|   |     replicate      |
-//			+---+  max inflight = n  |
-//				+--------------------+
-//
 // Default state => probe (m: 0, n: log.lastIdx)
 //
 // probe:
 // 		send log entries (pause: true)
+// 		unreachable (pause: false)
 // 		receive append response (pause: false)
 //			success: => replicate (m: n, n: n+1)
-// 			failed: => probe (m: 0, n: min{rejectIdx, hintIdx})
+// 			failed: => probe (m: 0, n: max{1, min{rejectIdx, hintIdx+1}})
 //			ignore on rejectIdx != n-1
 // 		send snapshot => snapshot (p: log.snapshot.meta.idx)
 //
 // snapshot:
 // 		receive snapshot response
-//			success: => replicate (m: p, n: p + 1) (should be probe, because when receive response, leader may generate new snapshot)
-//			failed: => probe (m: 0, n: p)
+//			success: => replicate (m: p, n: p + 1) (should be probe, because
+// 						when receive response, leader may generate new snapshot)
+//			failed: => probe (m: 0, n: p), because core will become follower if recieve
+//					reject from follower, it mean that term is old.
 //		unreachable => probe (m: 0, n: p)
 //
 // replicate:
 // 		send log entries (size: {infs.left, log.lastIdx-n}, n: lastIndex send)
 // 		unreachable => probe (n: m + 1)
 // 		receive replicate response:
-//			success (m: idx)
-// 			failed => probe (n: min{rejectIdx, hintIdx}) // FIXME: 什么情况会出现呢？
+//			success (m: max{m, idx})
+// 			failed => probe (n: min{rejectIdx, hintIdx})
+//				failed may not exists, because Unreachable & becomeFollower eat this
 //
 type nodeState int
 
@@ -100,7 +77,7 @@ func (i *InFlights) cap() uint {
 }
 
 func (i *InFlights) mod(idx uint) uint {
-	if idx >= i.cap() {
+	for idx >= i.cap() {
 		idx -= i.cap()
 	}
 	return idx
@@ -137,6 +114,8 @@ func (i *InFlights) freeTo(to uint64) {
 		i.start = idx
 		return
 	}
+	// all need free
+	i.reset()
 }
 
 func (i *InFlights) freeFirstOne() {
@@ -155,11 +134,6 @@ const (
 	voteReject
 	voteGranted
 )
-
-type Node interface {
-	updateVoteState(bool)
-	resetVoteState()
-}
 
 type node struct {
 	id      uint64
@@ -186,11 +160,6 @@ type node struct {
 	// this Progress will be paused. raft will not resend snapshot until the pending one
 	// is reported to be failed.
 	pendingSnapshot uint64
-
-	// recent_active is true if the progress is recently active. Receiving any messages
-	// from the corresponding follower indicates the progress is active.
-	// RecentActive can be reset to false after an election timeout.
-	//recentActive bool
 
 	// Inflights is a sliding window for the inflight messages.
 	// When inflights is full, no more message should be sent.
@@ -219,32 +188,23 @@ func makeNode(id, nextIdx uint64) node {
 }
 
 func (n *node) handleUnreachable() {
-	// During optimistic replication, if the remote becomes unreachable,
-	// there is huge probability that a MsgApp is lost.
-	if n.state == nodeStateReplicate {
+	switch n.state {
+	case nodeStateReplicate:
+		// During optimistic replication, if the remote becomes unreachable,
+		// there is huge probability that a MsgApp is lost.
 		n.nextIdx = n.matched + 1
 		n.becomeProbe()
-		//n.state = nodeStateProbe
-		//n.paused = false
-	} else if n.state == nodeStateProbe {
+	case nodeStateProbe:
 		n.resume()
-	} else { // n.state == nodeStateSnapshot
-		// 2. snapshot failure
-		// 	(no change)
+	case nodeStateSnapshot:
 		n.becomeProbe()
+		n.nextIdx = n.pendingSnapshot
 	}
-}
-
-func (n *node) becomeProbe() {
-	n.paused = false
-	n.state = nodeStateProbe
 }
 
 func (n *node) handleSnapshot(reject bool, index uint64) {
 	switch n.state {
 	case nodeStateSnapshot:
-		// 1. snapshot success
-		// (next=snapshot.index + 1)
 		if !reject {
 			n.matched = index
 			n.nextIdx = index + 1
@@ -257,20 +217,7 @@ func (n *node) handleSnapshot(reject bool, index uint64) {
 
 func (n *node) handleAppendEntries(reject bool, index uint64, rejectHint uint64) bool {
 	switch n.state {
-	case nodeStateSnapshot:
-		// 3. receives msgAppResp(rej=false&&index>lastsnap.index)
-		//	(match=m.index,next=match+1)
-		// TODO: Why ?
-		if !reject && index > n.pendingSnapshot {
-			n.matched = index
-			n.nextIdx = n.matched + 1
-			n.pendingSnapshot = InvalidIndex
-			n.state = nodeStateProbe
-		}
-		return false
 	case nodeStateReplicate:
-		//receives msgAppResp(rej=true)
-		//	(next=match+1)
 		if reject {
 			n.nextIdx = n.matched + 1
 			n.becomeProbe()
@@ -285,8 +232,6 @@ func (n *node) handleAppendEntries(reject bool, index uint64, rejectHint uint64)
 			return true
 		}
 	case nodeStateProbe:
-		// receives msgAppResp(rej=false&&index>match)
-		// 	(match=m.index,next=match+1)
 		if !reject && index > n.matched {
 			n.matched = index
 			n.nextIdx = n.matched + 1
@@ -302,10 +247,15 @@ func (n *node) handleAppendEntries(reject bool, index uint64, rejectHint uint64)
 				n.nextIdx = 1
 			}
 			n.resume()
+			return false
 		}
-		return false
 	}
 	return false
+}
+
+func (n *node) becomeProbe() {
+	n.paused = false
+	n.state = nodeStateProbe
 }
 
 func (n *node) becomeReplicate() {
@@ -339,9 +289,9 @@ func (n *node) isPaused() bool {
 	switch n.state {
 	case nodeStateProbe:
 		return n.paused
-	case nodeStateSnapshot:
-		return n.ins.full()
 	case nodeStateReplicate:
+		return n.ins.full()
+	case nodeStateSnapshot:
 		return true
 	default:
 		panic("unreachable")

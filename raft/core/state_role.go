@@ -3,23 +3,21 @@ package core
 type StateRole int
 
 const (
-	FOLLOWER  StateRole = 0
-	CANDIDATE StateRole = 1
-	LEADER    StateRole = 2
+	FOLLOWER      StateRole = 0
+	CANDIDATE     StateRole = 1
+	LEADER        StateRole = 2
 	PRE_CANDIDATE StateRole = 3
 )
 
+var stateRoleString = []string{
+	"Follower",
+	"Candidate",
+	"Leader",
+	"PreCandidate",
+}
+
 func (role StateRole) String() string {
-	switch role {
-	case FOLLOWER:
-		return "Follower"
-	case CANDIDATE:
-		return "Candidate"
-	case LEADER:
-		return "Leader"
-	default:
-		return "Unknown"
-	}
+	return stateRoleString[role]
 }
 
 func (role StateRole) IsLeader() bool {
@@ -33,4 +31,3 @@ func (role StateRole) IsCandidate() bool {
 func (role StateRole) IsFollower() bool {
 	return role == FOLLOWER
 }
-

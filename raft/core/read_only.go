@@ -6,7 +6,6 @@ type ReadState struct {
 }
 
 type readIndexStatus struct {
-	// msg   pd.Message
 	index   uint64
 	to      uint64
 	context []byte
@@ -31,8 +30,10 @@ func (ro *readOnly) addRequest(index uint64, to uint64, context []byte) {
 		return
 	}
 	ro.pendingReadIndex[ctx] = &readIndexStatus{
-		index: index, to: to, context: context,
-		acks: make(map[uint64]struct{})}
+		index:   index,
+		to:      to,
+		context: context,
+		acks:    make(map[uint64]struct{})}
 	ro.readIndexQueue = append(ro.readIndexQueue, ctx)
 }
 
