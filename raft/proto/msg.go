@@ -54,7 +54,7 @@ type MessageType int
 // at campaign, so candidate has same term with leader.
 //
 const (
-	MsgAppendRequest     MessageType = iota
+	MsgAppendRequest MessageType = iota
 	MsgAppendResponse
 	MsgPreVoteRequest
 	MsgPreVoteResponse
@@ -115,20 +115,20 @@ func (c *ConfState) Reset() { *c = ConfState{} }
 type ConfChangeType int
 
 const (
-	ConfChangeAddNode     ConfChangeType = iota
+	ConfChangeAddNode ConfChangeType = iota
 	ConfChangeRemoveNode
 	ConfChangeLearnerNode
 )
 
 type ConfChange struct {
-	Id         uint64
+	ID         uint64
 	ChangeType ConfChangeType
-	NodeId     uint64
+	NodeID     uint64
 }
 
 func (c *ConfChange) Reset() { *c = ConfChange{} }
 
-var ConfChangeString = []string {
+var ConfChangeString = []string{
 	"Config: Add node",
 	"Config: Remove node",
 }

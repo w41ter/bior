@@ -1,9 +1,12 @@
 package core
 
 import (
+	log "github.com/sirupsen/logrus"
+	"github.com/thinkermao/bior/raft/core/conf"
+	"github.com/thinkermao/bior/raft/core/peer"
+	"github.com/thinkermao/bior/raft/core/read"
 	"github.com/thinkermao/bior/raft/proto"
 	"github.com/thinkermao/bior/utils"
-	"github.com/thinkermao/bior/utils/log"
 )
 
 func (c *core) stepLeader(msg *raftpd.Message) {
@@ -24,17 +27,21 @@ func (c *core) stepLeader(msg *raftpd.Message) {
 func (c *core) stepFollower(msg *raftpd.Message) {
 	switch msg.MsgType {
 	case raftpd.MsgReadIndexResponse:
-		readState := ReadState{
+		c.resetLease()
+		readState := read.ReadState{
 			Index:      msg.Index,
 			RequestCtx: msg.Context,
 		}
 
 		c.callback.saveReadState(&readState)
 	case raftpd.MsgAppendRequest:
+		c.resetLease()
 		c.handleAppendEntries(msg)
 	case raftpd.MsgHeartbeatRequest:
+		c.resetLease()
 		c.handleHeartbeat(msg)
 	case raftpd.MsgSnapshotRequest:
+		c.resetLease()
 		c.handleSnapshot(msg)
 	}
 }
@@ -45,11 +52,11 @@ func (c *core) stepCandidate(msg *raftpd.Message) {
 	// StateCandidate, we may get stale MsgPreVoteResp messages in this term from
 	// our pre-candidate state).
 	case raftpd.MsgPreVoteResponse:
-		if c.state == PRE_CANDIDATE {
+		if c.state == RolePrevCandidate {
 			c.handleVoteResponse(msg)
 		}
 	case raftpd.MsgVoteResponse:
-		if c.state == CANDIDATE {
+		if c.state == RoleCandidate {
 			c.handleVoteResponse(msg)
 		}
 
@@ -70,13 +77,13 @@ func (c *core) stepCandidate(msg *raftpd.Message) {
 
 func (c *core) dispatch(msg *raftpd.Message) {
 	switch c.state {
-	case LEADER:
+	case RoleLeader:
 		c.stepLeader(msg)
-	case FOLLOWER:
+	case RoleFollower:
 		c.stepFollower(msg)
-	case PRE_CANDIDATE:
+	case RolePrevCandidate:
 		fallthrough
-	case CANDIDATE:
+	case RoleCandidate:
 		c.stepCandidate(msg)
 	}
 }
@@ -84,13 +91,13 @@ func (c *core) dispatch(msg *raftpd.Message) {
 func (c *core) handleReadIndexRequest(msg *raftpd.Message) {
 	utils.Assert(c.quorum() > 1 && c.state.IsLeader(), "receive wrong message")
 	// c must be leader, so term great than InvalidTerm.
-	if c.log.commitIndex != c.term {
+	if c.log.CommitIndex() != c.term {
 		// Reject read only request when this leader has not
 		// committed any log entry at its term. (raft thesis 6.4)
 		return
 	}
 
-	c.readOnly.addRequest(c.log.commitIndex, msg.From, msg.Context)
+	c.readOnly.AddRequest(c.log.CommitIndex(), msg.From, msg.Context)
 	c.broadcastHeartbeatWithCtx(msg.Context)
 }
 
@@ -98,51 +105,58 @@ func (c *core) handleReadIndexRequest(msg *raftpd.Message) {
 // - AppendEntries(commitIndex, prevLogIndex, prevLogTerm, entries)
 // - AppendEntriesReply(index, hint, reject)
 func (c *core) handleAppendEntries(msg *raftpd.Message) {
-	reply := raftpd.Message{}
-	reply.MsgType = raftpd.MsgAppendResponse
-	reply.From = c.id
-	if c.log.commitIndex > msg.LogIndex {
+	reply := raftpd.Message{
+		MsgType: raftpd.MsgAppendResponse,
+		From:    c.id,
+	}
+	if c.log.CommitIndex() > msg.LogIndex {
 		log.Infof("%d [Term: %d, commit: %d] reject expired append Entries "+
-			"from %d [logterm: %d, idx: %d]", c.id, c.term, c.log.commitIndex,
-			msg.From, msg.LogTerm, msg.LogIndex)
-		// expired append Entries has been committed,
-		// so it reply same with success append.
-		reply.Index = c.log.commitIndex
-		reply.Reject = false
-		c.send(&reply)
-	} else if idx, ok := c.log.TryAppend(msg.LogIndex, msg.LogTerm, msg.Entries); ok {
-		log.Infof("%d [Term: %d, commit: %d] accept append Entries "+
-			"from %d [logterm: %d, idx: %d]", c.id, c.term, c.log.commitIndex,
+			"from %d [logterm: %d, idx: %d]", c.id, c.term, c.log.CommitIndex(),
 			msg.From, msg.LogTerm, msg.LogIndex)
 
-		c.log.CommitTo(utils.MinUint64(msg.Index, idx))
-		reply.Index = idx
+		// expired append Entries has been committed,
+		// so it reply same with success append.
+		reply.Index = msg.LogIndex
+		reply.RejectHint = c.log.CommitIndex()
 		reply.Reject = false
-		c.send(&reply)
+	} else if idx, ok := c.log.TryAppend(msg.LogIndex, msg.LogTerm, msg.Entries); ok {
+		log.Infof("%d [Term: %d, commit: %d] accept append Entries "+
+			"from %d [logterm: %d, idx: %d], last: %d", c.id, c.term, c.log.CommitIndex(),
+			msg.From, msg.LogTerm, msg.LogIndex, idx)
+
+		// If leaderCommit > commitIndex, set commitIndex =
+		// min(leaderCommit, index of last new entry)
+		c.log.CommitTo(utils.MinUint64(msg.Index, idx))
+		reply.Index = msg.LogIndex
+		reply.RejectHint = idx /* idx is index of latest log entry */
+		reply.Reject = false
 	} else {
 		log.Infof("%d [logterm: %d, commit: %d, last idx: %d] rejected msgApp "+
-			"[logterm: %d, idx: %d] from %d", c.id, c.log.Term(msg.LogIndex),
-			c.log.commitIndex, c.log.lastIndex(), msg.LogTerm, msg.LogIndex, msg.From)
+			"[logterm: %d, idx: %d] and hint %d from %d", c.id, c.log.Term(msg.LogIndex),
+			c.log.CommitIndex(), c.log.LastIndex(), msg.LogTerm, msg.LogIndex, idx, msg.From)
+
 		reply.Index = msg.LogIndex
 		reply.RejectHint = idx /* idx is hintIndex*/
 		reply.Reject = true
-		c.send(&reply)
 	}
+	c.send(&reply)
 }
 
 func (c *core) handleAppendEntriesResponse(msg *raftpd.Message) {
-	node := c.getNodeById(msg.From)
+	log.Debugf("%d receieved append entries response from %d [rj: %v, idx: %d, hint: %d]",
+		c.id, msg.From, msg.Reject, msg.Index, msg.RejectHint)
 
-	successAppend := node.handleAppendEntries(msg.Reject, msg.Index, msg.RejectHint)
+	node := c.getNodeByID(msg.From)
+	successAppend := node.HandleAppendEntries(msg.Reject, msg.Index, msg.RejectHint)
 	if successAppend {
-		c.poll(node.matched)
+		c.poll(node.Matched)
 	}
 }
 
 func (c *core) tryRestore(snapshot *raftpd.Snapshot) bool {
 	utils.Assert(snapshot != nil, "nullptr exception")
 
-	if snapshot.Metadata.Index <= c.log.commitIndex {
+	if snapshot.Metadata.Index <= c.log.CommitIndex() {
 		/* expired snapshot install */
 		return false
 	}
@@ -152,85 +166,89 @@ func (c *core) tryRestore(snapshot *raftpd.Snapshot) bool {
 		return false
 	}
 
-	// c.log.tryRestore(snapshot)
 	return true
 }
 
 func (c *core) handleSnapshot(msg *raftpd.Message) {
-	reply := raftpd.Message{}
-	reply.To = msg.From
-	reply.MsgType = raftpd.MsgSnapshotResponse
-	reply.Reject = false
+	reply := raftpd.Message{
+		To:      msg.From,
+		MsgType: raftpd.MsgSnapshotResponse,
+		Reject:  false,
+	}
 	if c.tryRestore(msg.Snapshot) {
-		reply.Index = c.log.lastIndex()
 		log.Infof("%x [commit: %d] restore snapshot [index: %d, term: %d]",
-			c.id, c.log.commitIndex, msg.Snapshot.Metadata.Index, msg.Snapshot.Metadata.Term)
+			c.id, c.log.CommitIndex(),
+			msg.Snapshot.Metadata.Index, msg.Snapshot.Metadata.Term)
+
+		reply.Index = c.log.LastIndex()
 		c.callback.applySnapshot(msg.Snapshot)
 	} else {
 		log.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
-			c.id, c.log.commitIndex, msg.Snapshot.Metadata.Index, msg.Snapshot.Metadata.Term)
-		reply.Index = c.log.commitIndex
+			c.id, c.log.CommitIndex(),
+			msg.Snapshot.Metadata.Index, msg.Snapshot.Metadata.Term)
+
+		reply.Index = c.log.CommitIndex()
 	}
 	c.send(&reply)
 }
 
 func (c *core) handleSnapshotResponse(msg *raftpd.Message) {
-	node := c.getNodeById(msg.From)
-	node.handleSnapshot(msg.Reject, msg.Index)
+	node := c.getNodeByID(msg.From)
+	node.HandleSnapshot(msg.Reject, msg.Index)
 }
 
 func (c *core) handleUnreachable(msg *raftpd.Message) {
-	node := c.getNodeById(msg.From)
+	node := c.getNodeByID(msg.From)
 
-	node.handleUnreachable()
+	node.HandleUnreachable()
 	log.Infof("%x failed to send message to %x"+
 		" because it is unreachable", c.id, msg.From)
 }
 
 func (c *core) handleHeartbeat(msg *raftpd.Message) {
-	c.leaderId = msg.From
+	c.leaderID = msg.From
 	c.timeElapsed = 0
 	c.log.CommitTo(msg.Index)
 
-	reply := raftpd.Message{}
-	reply.To = msg.From
-	reply.Reject = false
-	reply.MsgType = raftpd.MsgHeartbeatResponse
+	reply := raftpd.Message{
+		To:      msg.From,
+		Reject:  false,
+		MsgType: raftpd.MsgHeartbeatResponse,
+	}
 	c.send(&reply)
 }
 
 func (c *core) handleHeartbeatResponse(msg *raftpd.Message) {
-	ackCount := c.readOnly.receiveAck(msg.From, msg.Context)
+	ackCount := c.readOnly.ReceiveAck(msg.From, msg.Context)
 	if ackCount < c.quorum() {
 		return
 	}
 
-	rss := c.readOnly.advance(msg.Context)
+	rss := c.readOnly.Advance(msg.Context)
 	for _, rs := range rss {
-		if rs.to == c.id {
-			readState := ReadState{
-				Index:      rs.index,
-				RequestCtx: rs.context,
+		if rs.To == c.id {
+			readState := read.ReadState{
+				Index:      rs.Index,
+				RequestCtx: rs.Context,
 			}
 
 			c.callback.saveReadState(&readState)
 		} else {
 			redirect := raftpd.Message{
-				To:      rs.to,
+				To:      rs.To,
 				MsgType: raftpd.MsgReadIndexResponse,
-				Index:   rs.index,
-				Context: rs.context,
+				Index:   rs.Index,
+				Context: rs.Context,
 			}
 			c.send(&redirect)
 		}
 	}
 }
 
-func (c *core) voteStateCount(state voteState) int {
-	/* self has one */
-	var count = 1
+func (c *core) voteStateCount(state peer.VoteState) int {
+	var count = 0
 	for i := 0; i < len(c.nodes); i++ {
-		if c.nodes[i].vote == state {
+		if c.nodes[i].Vote == state {
 			count++
 		}
 	}
@@ -238,16 +256,17 @@ func (c *core) voteStateCount(state voteState) int {
 }
 
 func (c *core) handlePreVote(msg *raftpd.Message) {
-	reply := raftpd.Message{}
-	reply.To = msg.From
-	reply.MsgType = raftpd.MsgPreVoteResponse
+	reply := raftpd.Message{
+		To:      msg.From,
+		MsgType: raftpd.MsgPreVoteResponse,
+	}
 
 	// Reply false if last AppendEntries call was received less than election timeout ago.
 	// Reply false if term < currentTerm.
 	// Reply false if candidate's log isn't at least as up­to­date as receiver's log.
-	if (c.leaderId != InvalidId && c.timeElapsed < c.electionTick) ||
+	if (c.leaderID != conf.InvalidID && c.timeElapsed < c.electionTick) ||
 		(msg.Term < c.term) ||
-		!c.log.IsUpToDate(msg.LogIndex, msg.LogTerm) {
+		c.log.IsUpToDate(msg.LogIndex, msg.LogTerm) {
 		reply.Reject = false
 	} else {
 		reply.Reject = true
@@ -257,14 +276,18 @@ func (c *core) handlePreVote(msg *raftpd.Message) {
 }
 
 func (c *core) handleVote(msg *raftpd.Message) {
-	reply := raftpd.Message{}
-	reply.To = msg.From
-	reply.MsgType = raftpd.MsgVoteResponse
+	reply := raftpd.Message{
+		To:      msg.From,
+		MsgType: raftpd.MsgVoteResponse,
+	}
 
-	// no vote or vote for candidate, and log is at least as up-to-date as receiver's.
-	if c.vote == InvalidId || c.vote == msg.From ||
+	// If votedFor is null or candidateId, and candidate’s log is at
+	// least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
+	if (c.vote == conf.InvalidID || c.vote == msg.From) &&
 		c.log.IsUpToDate(msg.LogIndex, msg.LogTerm) {
 		reply.Reject = false
+		c.vote = msg.From
+		log.Infof("%d [term: %d] accepted vote request from %d", c.id, c.term, msg.From)
 	} else {
 		reply.Reject = true
 	}
@@ -277,14 +300,15 @@ func (c *core) handleVoteResponse(msg *raftpd.Message) {
 		log.Infof("%x received %v rejection from %x at term %d",
 			c.id, msg.MsgType, msg.From, c.term)
 	} else {
-		log.Infof("%x received %v from %x at term %s",
+		log.Infof("%x received %v from %x at term %d",
 			c.id, msg.MsgType, msg.From, msg.Term)
 	}
 
-	node := c.getNodeById(msg.From)
-	node.updateVoteState(msg.Reject)
+	node := c.getNodeByID(msg.From)
+	node.UpdateVoteState(msg.Reject)
 
-	count := c.voteStateCount(voteGranted)
+	/* self has one */
+	count := c.voteStateCount(peer.VoteGranted) + 1
 	if count >= c.quorum() {
 		if msg.MsgType == raftpd.MsgVoteResponse {
 			c.becomeLeader()
@@ -295,22 +319,20 @@ func (c *core) handleVoteResponse(msg *raftpd.Message) {
 		return
 	}
 
-	// TODO: why?
 	// return to follower state if it receives vote denial from a majority
-	count = c.voteStateCount(voteReject)
+	count = c.voteStateCount(peer.VoteReject)
 	if count >= c.quorum() {
-		c.becomeFollower(msg.Term, InvalidId)
+		c.becomeFollower(msg.Term, conf.InvalidID)
 	}
 }
 
 func (c *core) broadcastHeartbeatWithCtx(context []byte) {
 	for i := 0; i < len(c.nodes); i++ {
-		node := &c.nodes[i]
-		c.sendHeartbeat(node, context)
+		c.sendHeartbeat(c.nodes[i], context)
 	}
 }
 
-func (c *core) sendHeartbeat(node *node, context []byte) {
+func (c *core) sendHeartbeat(node *peer.Node, context []byte) {
 	// Attach the commit as min(to.matched, raftlog.committed).
 	// When the leader sends out heartbeat message,
 	// the receiver(follower) might not be matched with the leader
@@ -318,26 +340,27 @@ func (c *core) sendHeartbeat(node *node, context []byte) {
 	// The leader MUST NOT forward the follower's commit to
 	// an unmatched index, in order to preserving Log Matching Property.
 
-	msg := raftpd.Message{}
-	msg.To = node.id
-	msg.MsgType = raftpd.MsgHeartbeatRequest
-	msg.Index = utils.MinUint64(node.matched, c.log.commitIndex)
-	msg.Context = context
+	msg := raftpd.Message{
+		To:      node.ID,
+		MsgType: raftpd.MsgHeartbeatRequest,
+		Index:   utils.MinUint64(node.Matched, c.log.CommitIndex()),
+		Context: context,
+	}
 
 	c.send(&msg)
 }
 
 // broadcastAppend send append or snapshot to followers.
 func (c *core) broadcastAppend() {
-	firstIndex := c.log.firstIndex()
+	firstIndex := c.log.FirstIndex()
 	for i := 0; i < len(c.nodes); i++ {
-		node := &c.nodes[i]
-		/* ignore paused node */
-		if node.isPaused() {
+		node := c.nodes[i]
+		/* ignore paused and not expired node */
+		if node.IsPaused() && !node.WakeUp() {
 			continue
 		}
 
-		if c.nodes[i].nextIdx >= firstIndex {
+		if node.NextIdx >= firstIndex {
 			c.sendAppend(node)
 		} else {
 			// send snapshot if we failed to get term or entries
@@ -346,34 +369,36 @@ func (c *core) broadcastAppend() {
 	}
 }
 
-func (c *core) sendAppend(node *node) {
-	msg := raftpd.Message{}
-	msg.To = node.id
-	msg.Index = c.log.commitIndex
-	msg.MsgType = raftpd.MsgAppendRequest
-	msg.LogIndex = node.nextIdx - 1
-	msg.LogTerm = c.log.Term(msg.LogIndex)
+func (c *core) sendAppend(node *peer.Node) {
+	logIndex := node.NextIdx - 1
+	msg := raftpd.Message{
+		To:       node.ID,
+		Index:    c.log.CommitIndex(),
+		MsgType:  raftpd.MsgAppendRequest,
+		LogIndex: logIndex,
+		LogTerm:  c.log.Term(logIndex),
+	}
 
-	if c.log.lastIndex() >= node.nextIdx {
-		entries := c.log.Slice(node.nextIdx, c.log.lastIndex()+1)
+	if c.log.LastIndex() >= node.NextIdx {
+		entries := c.log.Slice(node.NextIdx, c.log.LastIndex()+1)
 		// slice message with max size
-		var size uint = 0
-		for i := 0; i < len(entries); i++ {
+		var size uint
+		// Starting from 1, to prevent the issue of unable to send data.
+		for i := 1; i < len(entries); i++ {
+			// FIXME: Find a more accurate, easy to understand,
+			// more aggregated way to calculate size.
 			size += uint(16 + len(entries[i].Data))
 			if size > c.maxSizePerMsg {
 				entries = entries[:i]
+				break
 			}
 		}
 		msg.Entries = make([]raftpd.Entry, len(entries))
 		copy(msg.Entries, entries)
-		utils.Assert(len(entries) == 0 || msg.Entries[0].Index != InvalidIndex, "")
+		utils.Assert(len(entries) == 0 || msg.Entries[0].Index != conf.InvalidIndex, "")
 	} else {
 		msg.Entries = make([]raftpd.Entry, 0)
 	}
-
-	log.Debugf("%d [Term: %d] send append pd [idx: %d, Term: %d] "+
-		"to node: %d [matched: %d next index: %d]",
-		c.id, c.term, msg.LogIndex, msg.LogTerm, node.id, node.matched, node.nextIdx)
 
 	// Debug: validate consistency
 	if len(msg.Entries) > 0 {
@@ -383,42 +408,37 @@ func (c *core) sendAppend(node *node) {
 		}
 	}
 
-	if len(msg.Entries) != 0 {
-		switch node.state {
-		case nodeStateProbe:
-			// FIXME: only send little message
-			node.pause()
-		case nodeStateReplicate:
-			// optimistically increase the next when in ProgressStateReplicate
-			lastIndex := msg.Entries[len(msg.Entries)-1].Index
-			node.optimisticUpdate(lastIndex)
-		default:
-			log.Fatalf("%x is sending append in unhandled state %s", c.id, node.state)
-		}
-	}
+	log.Infof("%d [Term: %d] send append [idx: %d, Term: %d, len: %d] "+
+		"to node: %d [matched: %d next: %d]",
+		c.id, c.term, msg.LogIndex, msg.LogTerm, len(msg.Entries),
+		node.ID, node.Matched, node.NextIdx)
+
+	utils.Assert(!node.IsPaused(), "try call paused node")
+
+	node.SendEntries(msg.Entries)
 	c.send(&msg)
 }
 
-func (c *core) sendSnapshot(node *node) {
+func (c *core) sendSnapshot(node *peer.Node) {
 	msg := raftpd.Message{}
-	msg.To = node.id
+	msg.To = node.ID
 
 	snapshot := c.callback.readSnapshot()
 	// if snapshot is building at now, it will return nil,
 	// so just ignore it and send message to it on next tick.
 	if snapshot == nil {
 		log.Infof("%x failed to send snapshot to %x because snapshot "+
-			"is temporarily unavailable", c.id, node.id)
+			"is temporarily unavailable", c.id, node.ID)
 		return
 	}
 
 	log.Infof("%x [firstIndex: %d, commit: %d] send "+
-		"snapshot[index: %d, term: %d] to %x", c.id, c.log.firstIndex(),
-		snapshot.Metadata.Index, snapshot.Metadata.Term, node.id)
+		"snapshot[index: %d, term: %d] to %x", c.id, c.log.FirstIndex(),
+		snapshot.Metadata.Index, snapshot.Metadata.Term, node.ID)
 
-	node.sendSnapshot(snapshot.Metadata.Index)
+	node.SendSnapshot(snapshot.Metadata.Index)
 
-	log.Infof("%x paused sending replication messages to %x", c.id, node.id)
+	log.Infof("%x paused sending replication messages to %x", c.id, node.ID)
 	msg.Snapshot = snapshot
 	msg.MsgType = raftpd.MsgSnapshotRequest
 

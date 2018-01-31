@@ -2,10 +2,8 @@ package utils
 
 import "time"
 
-/**
- * StartTimer create a timer trigger per millis, and return a channel
- * can close trigger and release it.
- */
+// StartTimer create a timer trigger per millis, and return a channel
+// can close trigger and release it.
 func StartTimer(millis int, f func(time.Time)) chan struct{} {
 	done := make(chan struct{}, 1)
 	go func() {

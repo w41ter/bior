@@ -1,62 +1,62 @@
-package core
+package read
 
 type ReadState struct {
 	Index      uint64
 	RequestCtx []byte
 }
 
-type readIndexStatus struct {
-	index   uint64
-	to      uint64
-	context []byte
-	acks    map[uint64]struct{}
+type ReadIndexStatus struct {
+	Index   uint64
+	To      uint64
+	Context []byte
+	Acks    map[uint64]struct{}
 }
 
-type readOnly struct {
-	pendingReadIndex map[string]*readIndexStatus
+type ReadOnly struct {
+	pendingReadIndex map[string]*ReadIndexStatus
 	readIndexQueue   []string
 }
 
-func makeReadOnly() *readOnly {
-	return &readOnly{
-		pendingReadIndex: make(map[string]*readIndexStatus),
+func MakeReadOnly() *ReadOnly {
+	return &ReadOnly{
+		pendingReadIndex: make(map[string]*ReadIndexStatus),
 		readIndexQueue:   make([]string, 0),
 	}
 }
 
-func (ro *readOnly) addRequest(index uint64, to uint64, context []byte) {
+func (ro *ReadOnly) AddRequest(index uint64, to uint64, context []byte) {
 	ctx := string(context)
 	if _, ok := ro.pendingReadIndex[ctx]; ok {
 		return
 	}
-	ro.pendingReadIndex[ctx] = &readIndexStatus{
-		index:   index,
-		to:      to,
-		context: context,
-		acks:    make(map[uint64]struct{})}
+	ro.pendingReadIndex[ctx] = &ReadIndexStatus{
+		Index:   index,
+		To:      to,
+		Context: context,
+		Acks:    make(map[uint64]struct{})}
 	ro.readIndexQueue = append(ro.readIndexQueue, ctx)
 }
 
-func (ro *readOnly) receiveAck(from uint64, context []byte) int {
+func (ro *ReadOnly) ReceiveAck(from uint64, context []byte) int {
 	rs, ok := ro.pendingReadIndex[string(context)]
 	if !ok {
 		return 0
 	}
 
-	rs.acks[from] = struct{}{}
+	rs.Acks[from] = struct{}{}
 	// add one to include an ack from local node
-	return len(rs.acks) + 1
+	return len(rs.Acks) + 1
 }
 
-// advance advances the read only request queue kept by the readonly struct.
+// Advance advances the read only request queue kept by the ReadOnly struct.
 // It dequeues the requests until it finds the read only request that has
 // the same context as the given `m`.
-func (ro *readOnly) advance(context []byte) []*readIndexStatus {
+func (ro *ReadOnly) Advance(context []byte) []*ReadIndexStatus {
 	var i int
 	var found bool
 
 	ctx := string(context)
-	rss := []*readIndexStatus{}
+	rss := []*ReadIndexStatus{}
 	waitRemoved := []string{}
 
 	for _, okctx := range ro.readIndexQueue {
@@ -85,8 +85,8 @@ func (ro *readOnly) advance(context []byte) []*readIndexStatus {
 }
 
 // lastPendingRequestCtx returns the context of the last pending read only
-// request in readonly struct.
-func (ro *readOnly) lastPendingRequestCtx() string {
+// request in ReadOnly struct.
+func (ro *ReadOnly) lastPendingRequestCtx() string {
 	if len(ro.readIndexQueue) == 0 {
 		return ""
 	}

@@ -1,6 +1,9 @@
 package core
 
 import (
+	log "github.com/sirupsen/logrus"
+	"github.com/thinkermao/bior/raft/core/conf"
+	"github.com/thinkermao/bior/raft/core/read"
 	"github.com/thinkermao/bior/raft/proto"
 )
 
@@ -24,7 +27,7 @@ type Ready struct {
 	// when its applied index is greater than the index in ReadState.
 	// Note that the read_state will be returned when raft receives MsgReadIndex.
 	// The returned is only valid for the request that requested to read.
-	ReadStates []ReadState
+	ReadStates []read.ReadState
 
 	// Entries specifies entries to be saved to stable storage BEFORE
 	// Messages are sent.
@@ -46,89 +49,70 @@ type Ready struct {
 }
 
 type RawNode struct {
-	raft   *core
+	*core
 	prevHS raftpd.HardState
 	prevSS SoftState
 
-	readStates    []ReadState
+	readStates    []read.ReadState
 	commitEntries []raftpd.Entry
 	messages      []raftpd.Message
 
 	application NodeApplication
 }
 
-func MakeRawNode(config *Config, app NodeApplication) *RawNode {
+func MakeRawNode(config *conf.Config, app NodeApplication) *RawNode {
 	node := &RawNode{}
 
-	node.raft = makeCore(config, node)
+	node.core = makeCore(config, node)
 	node.application = app
-	node.prevSS = node.raft.ReadSoftState()
-	node.prevHS = node.raft.ReadHardState()
+	node.prevSS = node.core.ReadSoftState()
+	node.prevHS = node.core.ReadHardState()
 	return node
-}
-
-func (node *RawNode) Periodic(millsSinceLastPeriod int) {
-	node.raft.Periodic(millsSinceLastPeriod)
-}
-
-func (node *RawNode) Propose(bytes []byte) (uint64, uint64, bool) {
-	return node.raft.Propose(bytes)
-}
-
-func (node *RawNode) ProposeConfChange(cc *raftpd.ConfChange) (uint64, uint64, bool) {
-	return node.raft.ProposeConfChange(cc)
-}
-
-func (node *RawNode) ApplyConfChange(cc *raftpd.ConfChange) raftpd.ConfState {
-	return node.raft.ApplyConfChange(cc)
-}
-
-func (node *RawNode) CompactTo(metadata *raftpd.SnapshotMetadata) {
-	node.raft.CompactTo(metadata)
-}
-
-func (node *RawNode) Read(context []byte) {
-	node.raft.Read(context)
-}
-
-func (node *RawNode) Step(msg *raftpd.Message) {
-	// TODO: validate
-	node.raft.Step(msg)
 }
 
 func (node *RawNode) Ready() Ready {
 	ready := Ready{}
 
-	ss := node.raft.ReadSoftState()
+	ss := node.core.ReadSoftState()
 	if ss != node.prevSS {
 		ready.SS = &ss
 		node.prevSS = ss
 	}
 
-	hs := node.raft.ReadHardState()
+	hs := node.core.ReadHardState()
 	if hs != node.prevHS {
 		ready.HS = &hs
 		node.prevHS = hs
 	}
 
-	ready.Entries = node.raft.log.StableEntries()
+	ready.Entries = node.core.log.StableEntries()
 	ready.CommitEntries = node.commitEntries
 	ready.Messages = node.messages
 	ready.ReadStates = node.readStates
 
+	log.Debugf("%d handle ready: [stable: %d, commit: %d, msg: %d]",
+		node.id, len(ready.Entries), len(ready.CommitEntries), len(ready.Messages))
+
 	// clear all
 	node.commitEntries = make([]raftpd.Entry, 0)
 	node.messages = make([]raftpd.Message, 0)
-	node.readStates = make([]ReadState, 0)
+	node.readStates = make([]read.ReadState, 0)
 
 	return ready
+}
+
+func (node *RawNode) ReadStatus() (uint64, bool) {
+	ss := node.core.ReadSoftState()
+	hs := node.core.ReadHardState()
+
+	return hs.Term, ss.State.IsLeader()
 }
 
 func (node *RawNode) send(msg *raftpd.Message) {
 	node.messages = append(node.messages, *msg)
 }
 
-func (node *RawNode) saveReadState(readStae *ReadState) {
+func (node *RawNode) saveReadState(readStae *read.ReadState) {
 	node.readStates = append(node.readStates, *readStae)
 }
 

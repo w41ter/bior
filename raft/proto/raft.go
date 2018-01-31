@@ -14,13 +14,14 @@ type EntryType int
 
 const (
 	EntryNormal EntryType = iota
+	EntryBroadcast
 	EntryConfChange
 )
 
 type Entry struct {
 	Index uint64
 	Term  uint64
-	Type EntryType
+	Type  EntryType
 	Data  []byte
 }
 

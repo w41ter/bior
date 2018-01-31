@@ -1,4 +1,4 @@
-package test
+package verify
 
 import (
 	"fmt"
@@ -38,7 +38,7 @@ func TestRaft_ReElection(t *testing.T) {
 	env := envior.MakeEnviornment(t, servers, false)
 	defer env.Cleanup()
 
-	fmt.Printf("Test : election after network failure ...\n")
+	fmt.Printf("Test: election after network failure ...\n")
 
 	leader1 := env.CheckOneLeader()
 
@@ -46,13 +46,11 @@ func TestRaft_ReElection(t *testing.T) {
 	env.Disconnect(leader1)
 	env.CheckOneLeader()
 
-	// if the old leader rejoins, that shouldn't
-	// disturb the old leader.
+	// if the old leader rejoins, that shouldn't disturb the old leader.
 	env.Connect(leader1)
 	leader2 := env.CheckOneLeader()
 
-	// if there's no quorum, no leader should
-	// be elected.
+	// if there's no quorum, no leader should be elected.
 	env.Disconnect(leader2)
 	env.Disconnect((leader2 + 1) % servers)
 	time.Sleep(2 * RaftElectionTimeout)

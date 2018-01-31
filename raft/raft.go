@@ -1,15 +1,17 @@
 package raft
 
 import (
-	"github.com/thinkermao/bior/raft/core"
-	"github.com/thinkermao/bior/raft/proto"
-	"github.com/thinkermao/bior/raft/wal"
-	"github.com/thinkermao/bior/utils"
-	"github.com/thinkermao/bior/utils/pd"
 	"sync"
 	"time"
+
+	"github.com/thinkermao/bior/raft/core"
+	"github.com/thinkermao/bior/raft/core/conf"
+	"github.com/thinkermao/bior/raft/proto"
+	"github.com/thinkermao/bior/utils"
+	"github.com/thinkermao/bior/utils/pd"
 )
 
+// Application is interface for state machine.
 type Application interface {
 	ApplyEntry(entry *raftpd.Entry)
 	ReadStateNotice(idx uint64, bytes []byte)
@@ -17,33 +19,37 @@ type Application interface {
 	ReadSnapshot() *raftpd.Snapshot
 }
 
+// Raft is a implementions of raft consensus algorithm,
+// with log storage and periodic timer. Raft is thread-safty.
 type Raft struct {
 	mutex sync.Mutex
 
 	id uint64
 
 	raft core.Raft
-	wal  *wal.Wal
+	wal  *logStorage
 
 	timerStopper chan struct{}
 	callback     Application
-	transport    Transport
+	transport    Transporter
 }
 
-func MakeRaft(id uint64,
+// MakeRaft return a instance of Raft.
+func MakeRaft(
+	id uint64,
 	nodes []uint64,
 	electionTimeout, heartbeatTimeout, tickSize int,
 	walDir string,
 	application Application,
-	transport Transport) (*Raft, error) {
+	transport Transporter) (*Raft, error) {
 	raft := &Raft{id: id}
 	raft.callback = application
 	raft.transport = transport
 
-	config := core.Config{
-		Id:            id,
-		Vote:          core.InvalidId,
-		Term:          core.InvalidTerm,
+	config := conf.Config{
+		ID:            id,
+		Vote:          conf.InvalidID,
+		Term:          conf.InvalidTerm,
 		ElectionTick:  electionTimeout,
 		HeartbeatTick: heartbeatTimeout,
 		Nodes:         nodes,
@@ -52,7 +58,7 @@ func MakeRaft(id uint64,
 
 	raft.raft = core.MakeRaft(&config, raft)
 
-	w, err := wal.CreateWal(walDir, core.InvalidIndex+1)
+	w, err := CreateLogStorate(walDir, conf.InvalidIndex+1)
 	if err != nil {
 		return nil, err
 	}
@@ -63,19 +69,17 @@ func MakeRaft(id uint64,
 	return raft, nil
 }
 
-func RebuildRaft(id uint64,
+// RebuildRaft rebuild a instance of Raft.
+func RebuildRaft(
+	id uint64,
 	logSequenceNumber uint64,
 	nodes []uint64,
 	electionTimeout, heartbeatTimeout, tickSize int,
 	walDir string,
 	application Application,
-	transport Transport) (*Raft, error) {
-	w, err := wal.Open(walDir, logSequenceNumber)
-	if err != nil {
-		return nil, err
-	}
+	transport Transporter) (*Raft, error) {
 
-	state, entries, err := w.ReadAll()
+	ls, entries, state, err := RestoreLogStorage(walDir, logSequenceNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -83,8 +87,8 @@ func RebuildRaft(id uint64,
 	raft := &Raft{id: id}
 	raft.callback = application
 	raft.transport = transport
-	config := core.Config{
-		Id:            id,
+	config := conf.Config{
+		ID:            id,
 		Vote:          state.Vote,
 		Term:          state.Term,
 		ElectionTick:  electionTimeout,
@@ -93,62 +97,74 @@ func RebuildRaft(id uint64,
 		Entries:       entries,
 	}
 	raft.raft = core.MakeRaft(&config, raft)
-	raft.wal = w
+	raft.wal = ls
 
 	raft.service(tickSize)
 
 	return raft, nil
 }
 
+// GetState return the state of raft.
+func (raft *Raft) GetState() (uint64, bool) {
+	return raft.raft.ReadStatus()
+}
+
 // Kill is the only one global method no need mutex.
 func (raft *Raft) Kill() {
-	var data struct{}
-	raft.timerStopper <- data
+	raft.timerStopper <- struct{}{}
 }
 
 // Read operate not sync disk
-func (raft *Raft) Read(bytes []byte) {
+func (raft *Raft) Read(bytes []byte) bool {
 	raft.mutex.Lock()
 	defer raft.mutex.Unlock()
 
-	raft.raft.Read(bytes)
+	return raft.raft.Read(bytes)
 }
 
 // Write write operate will sync disk.
-func (raft *Raft) Write(bytes []byte) (uint64, bool) {
+func (raft *Raft) Write(bytes []byte) (uint64, uint64, bool) {
 	raft.mutex.Lock()
 	defer raft.mutex.Unlock()
 
-	// Check is leader
-	index, _, isLeader := raft.raft.Propose(bytes)
-	if !isLeader {
-		return 0, false
-	}
-	return index, true
+	return raft.raft.Propose(bytes)
 }
 
+// Compact notice
 func (raft *Raft) Compact(snapshot *raftpd.Snapshot) {
 	raft.mutex.Lock()
 	defer raft.mutex.Unlock()
 
-	raft.raft.CompactTo(&snapshot.Metadata)
+	raft.raft.ApplySnapshot(&snapshot.Metadata)
+}
+
+func (raft *Raft) ready() (rd core.Ready) {
+	raft.mutex.Lock()
+	defer raft.mutex.Unlock()
+	rd = raft.raft.Ready()
+	return
 }
 
 func (raft *Raft) handleRaftReady() {
-	ready := raft.raft.Ready()
-
+	ready := raft.ready()
 	// FIXME: 在save之前可以先处理 readStateNotice
-	raft.wal.Save(ready.HS, ready.Entries)
+	raft.wal.save(ready.HS, ready.Entries)
+	raft.wal.sync()
 
 	for i := 0; i < len(ready.CommitEntries); i++ {
 		// FIXME: 是否有必要将更改配置信息应用
 		raft.callback.ApplyEntry(&ready.CommitEntries[i])
+	}
+
+	raft.mutex.Lock()
+	for i := 0; i < len(ready.CommitEntries); i++ {
 		if ready.CommitEntries[i].Type == raftpd.EntryConfChange {
 			cc := raftpd.ConfChange{}
 			pd.MustUnmarshal(&cc, ready.CommitEntries[i].Data)
 			raft.raft.ApplyConfChange(&cc)
 		}
 	}
+	raft.mutex.Unlock()
 
 	for i := 0; i < len(ready.ReadStates); i++ {
 		raft.callback.ReadStateNotice(ready.ReadStates[i].Index,
@@ -158,7 +174,7 @@ func (raft *Raft) handleRaftReady() {
 	// send messages accumulation at raft.msg
 	for i := 0; i < len(ready.Messages); i++ {
 		raftMsg := &ready.Messages[i]
-		raft.transport.Send(raftMsg)
+		raft.transport.Send(raftMsg.To, raftMsg)
 	}
 }
 
@@ -167,16 +183,20 @@ func (raft *Raft) handleRaftReady() {
 func (raft *Raft) service(tickSize int) {
 	last := time.Now()
 	raft.timerStopper = utils.StartTimer(tickSize, func(time time.Time) {
+		// FIXME: Adjust time, because lock cost.
 		nanoseconds := time.Sub(last).Nanoseconds()
 		last = time
 
-		raft.mutex.Lock()
-		defer raft.mutex.Unlock()
-
 		var millsSinceLastPeriod = int(nanoseconds / 1000000)
-		raft.raft.Periodic(millsSinceLastPeriod)
+		raft.periodic(millsSinceLastPeriod)
 		raft.handleRaftReady()
 	})
+}
+
+func (raft *Raft) periodic(millsSinceLastPeriod int) {
+	raft.mutex.Lock()
+	defer raft.mutex.Unlock()
+	raft.raft.Periodic(millsSinceLastPeriod)
 }
 
 func (raft *Raft) ApplySnapshot(snapshot *raftpd.Snapshot) {
@@ -185,4 +205,11 @@ func (raft *Raft) ApplySnapshot(snapshot *raftpd.Snapshot) {
 
 func (raft *Raft) ReadSnapshot() *raftpd.Snapshot {
 	return raft.callback.ReadSnapshot()
+}
+
+func (raft *Raft) Step(msg *raftpd.Message) {
+	raft.mutex.Lock()
+	defer raft.mutex.Unlock()
+
+	raft.raft.Step(msg)
 }

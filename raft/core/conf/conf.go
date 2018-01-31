@@ -1,25 +1,28 @@
-package core
+package conf
 
 import (
-	"github.com/thinkermao/bior/raft/proto"
-	"github.com/thinkermao/bior/utils/log"
 	"math"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/thinkermao/bior/raft/proto"
 )
 
+// Invalid value for raft.
 const (
 	InvalidIndex = 0
-	InvalidId    = math.MaxUint64
+	InvalidID    = math.MaxUint64
 	InvalidTerm  = 0
 )
 
+// Config given information to build raft algorithm.
 type Config struct {
-	// id is the identity of the local raft. id cannot be 0.
-	Id uint64
+	// Id is the identity of the local raft. id cannot be 0.
+	ID uint64
 
 	Vote uint64
 	Term uint64
 
-	// electionTick is the number of Node.Tick invocations that must pass between
+	// ElectionTick is the number of Node.Tick invocations that must pass between
 	// elections. That is, if a follower does not receive any message from the
 	// leader of current term before electionTick has elapsed, it will become
 	// candidate and start an election. electionTick must be greater than
@@ -38,8 +41,9 @@ type Config struct {
 	Entries []raftpd.Entry
 }
 
-func (c *Config) validate() bool {
-	if c.Id == 0 {
+// Verify check whether fields of Config is valid.
+func (c *Config) Verify() bool {
+	if c.ID == 0 {
 		log.Panicf("ID cannot be zero")
 	}
 

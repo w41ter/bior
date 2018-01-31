@@ -1,8 +1,7 @@
-package core
+package holder
 
 import "testing"
 import (
-	"fmt"
 	"github.com/thinkermao/bior/raft/proto"
 )
 
@@ -13,18 +12,26 @@ func makeEntry(idx, term uint64) raftpd.Entry {
 	}
 }
 
+func makeEntries(idxs ...uint64) []raftpd.Entry {
+	entries := []raftpd.Entry{}
+	for _, i := range idxs {
+		entries = append(entries, makeEntry(i, i))
+	}
+	return entries
+}
+
 func compareEntry(a, b raftpd.Entry) bool {
 	return a.Term == b.Term && a.Index == b.Index
 }
 
 func compareEntries(t *testing.T, i int, a, want []raftpd.Entry) {
 	if len(a) != len(want) {
-		t.Errorf("#%d: len(entries) want: %d, get: %d",
+		t.Fatalf("#%d: len(entries) want: %d, get: %d",
 			i, len(want), len(a))
 	}
 	for j := 0; j < len(a); j++ {
 		if !compareEntry(a[j], want[j]) {
-			t.Errorf("#%d: ents[%d] want: %v, get: %v",
+			t.Fatalf("#%d: ents[%d] want: %v, get: %v",
 				i, j, want[j], a[j])
 		}
 	}
@@ -32,18 +39,21 @@ func compareEntries(t *testing.T, i int, a, want []raftpd.Entry) {
 
 func TestMakeLogHolder(t *testing.T) {
 	tests := []LogHolder{
-		{1, []raftpd.Entry{makeEntry(1, 1)}, 1, 1, 1},
-		{1, []raftpd.Entry{makeEntry(2, 2)}, 2, 2, 2},
+		{1, 1, 1, 1, []raftpd.Entry{makeEntry(1, 1)}},
+		{1, 2, 2, 2, []raftpd.Entry{makeEntry(2, 2)}},
 	}
 
 	for i := 0; i < len(tests); i++ {
-		t := &tests[i]
-		e := MakeLogHolder(t.id, t.entries[0].Index, t.entries[0].Term)
-		if e.id != t.id || e.lastStabled != t.lastStabled ||
-			e.lastApplied != t.lastApplied || e.commitIndex != t.commitIndex ||
-			len(e.entries) != len(t.entries) || e.entries[0].Index != t.entries[0].Index ||
-			e.entries[0].Term != t.entries[0].Term {
-			panic(fmt.Sprintf("#%d: make log holder failed", i))
+		test := &tests[i]
+		e := MakeLogHolder(test.id, test.entries[0].Index, test.entries[0].Term)
+		if e.id != test.id ||
+			e.lastStabled != test.lastStabled ||
+			e.lastApplied != test.lastApplied ||
+			e.CommitIndex() != test.CommitIndex() ||
+			len(e.entries) != len(test.entries) ||
+			e.entries[0].Index != test.entries[0].Index ||
+			e.entries[0].Term != test.entries[0].Term {
+			t.Fatalf("#%d: make log holder failed", i)
 		}
 	}
 }
@@ -57,66 +67,26 @@ func TestRebuildLogHolder(t *testing.T) {
 		committed uint64
 	}
 
-	// TODO:
-}
-
-func TestLogHolder_getHintIndex(t *testing.T) {
-	type param struct {
-		entries []raftpd.Entry
-		idx     uint64
-		term    uint64
-		want    uint64
-	}
-
 	tests := []param{
-		{[]raftpd.Entry{makeEntry(1, 1), makeEntry(2, 2)}, 2, 1, 1},
-		{[]raftpd.Entry{makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 3)}, 3, 2, 2},
-		{[]raftpd.Entry{makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 2)}, 3, 3, 1},
-		{[]raftpd.Entry{makeEntry(1, 2), makeEntry(2, 2)}, 2, 3, 1},
+		{[]raftpd.Entry{makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 3)}, 0x1, 3, 1, 1},
+		{[]raftpd.Entry{makeEntry(1, 1), makeEntry(3, 3)}, 0x1, 3, 1, 1},
 	}
 
-	for i := 0; i < len(tests); i++ {
-		t := &tests[i]
-		e := RebuildLogHolder(1, t.entries)
-		get := e.getHintIndex(t.idx, t.term)
-		if get != t.want {
-			panic(fmt.Errorf("#%d: get: %d, want: %d", i, get, t.want))
+	for i, test := range tests {
+		holder := RebuildLogHolder(test.id, test.entries)
+		if holder.lastApplied != test.apply {
+			t.Fatalf("#%d: last applied want: %d, but get: %d",
+				i, test.apply, holder.lastApplied)
 		}
-	}
-}
 
-func TestLogHolder_findConflict(t *testing.T) {
-	previousEntries := []raftpd.Entry{
-		makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 3),
-	}
+		if holder.lastStabled != test.stable {
+			t.Fatalf("#%d: last stabled want: %d, but get: %d",
+				i, test.stable, holder.lastStabled)
+		}
 
-	tests := []struct {
-		entries  []raftpd.Entry
-		conflict uint64
-	}{
-		// no conflict, empty Entries
-		{[]raftpd.Entry{}, 0},
-		{[]raftpd.Entry{}, 0},
-		// no conflict
-		{[]raftpd.Entry{makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 3)}, 0},
-		{[]raftpd.Entry{makeEntry(2, 2), makeEntry(3, 3)}, 0},
-		{[]raftpd.Entry{makeEntry(3, 3)}, 0},
-		// no conflict, but has new Entries
-		{[]raftpd.Entry{makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 3), makeEntry(4, 4), makeEntry(5, 5)}, 4},
-		{[]raftpd.Entry{makeEntry(2, 2), makeEntry(3, 3), makeEntry(4, 4), makeEntry(5, 4)}, 4},
-		{[]raftpd.Entry{makeEntry(3, 3), makeEntry(4, 4), makeEntry(5, 4)}, 4},
-		{[]raftpd.Entry{makeEntry(4, 4), makeEntry(5, 5)}, 4},
-		// conflicts with existing Entries
-		{[]raftpd.Entry{makeEntry(1, 4), makeEntry(2, 4)}, 1},
-		{[]raftpd.Entry{makeEntry(2, 1), makeEntry(3, 4), makeEntry(4, 4)}, 2},
-		{[]raftpd.Entry{makeEntry(3, 1), makeEntry(4, 2), makeEntry(5, 4), makeEntry(6, 4)}, 3},
-	}
-	for i := 0; i < len(tests); i++ {
-		t := tests[i]
-		e := RebuildLogHolder(1, previousEntries)
-		conflict := e.findConflict(t.entries)
-		if conflict != t.conflict {
-			panic(fmt.Errorf("#%d: conflict = %d, want %d", i, conflict, t.conflict))
+		if holder.CommitIndex() != test.committed {
+			t.Fatalf("#%d: commit index want: %d, but get: %d",
+				i, test.committed, holder.CommitIndex())
 		}
 	}
 }
@@ -139,17 +109,17 @@ func TestLogHolder_Append(t *testing.T) {
 	}
 
 	for i := 0; i < len(tests); i++ {
-		t := &tests[i]
+		test := &tests[i]
 		e := RebuildLogHolder(1, prevEntries)
-		idx := e.Append(t.entries)
-		if idx != t.widx {
-			panic(fmt.Errorf("#%d: last_index = %d, want %d", i, idx, t.widx))
+		idx := e.Append(test.entries)
+		if idx != test.widx {
+			t.Fatalf("#%d: last_index = %d, want %d", i, idx, test.widx)
 		}
 		for j := range e.entries {
 			en := e.entries[j]
-			if en.Term != t.wents[j].Term || en.Index != t.wents[j].Index {
-				panic(fmt.Errorf("#%d: entry not expect %d [%d Term: %d] != [%d Term: %d]",
-					i, j, en.Index, en.Term, t.wents[j].Index, t.wents[j].Term))
+			if en.Term != test.wents[j].Term || en.Index != test.wents[j].Index {
+				t.Fatalf("#%d: entry not expect %d [%d Term: %d] != [%d Term: %d]",
+					i, j, en.Index, en.Term, test.wents[j].Index, test.wents[j].Term)
 			}
 		}
 	}
@@ -183,6 +153,7 @@ func TestLogHolder_CommitTo(t *testing.T) {
 	e := RebuildLogHolder(1, prevEntries)
 	e.CommitTo(3)
 	e.CommitTo(2)
+	e.CommitTo(4)
 }
 
 func TestLogHolder_CompactTo(t *testing.T) {
@@ -225,23 +196,23 @@ func TestLogHolder_IsUpToDate(t *testing.T) {
 		result bool
 	}{
 		// greater term, ignore lastIndex
-		{e.lastIndex() - 1, 4, true},
-		{e.lastIndex(), 4, true},
-		{e.lastIndex() + 1, 4, true},
+		{e.LastIndex() - 1, 4, true},
+		{e.LastIndex(), 4, true},
+		{e.LastIndex() + 1, 4, true},
 		// smaller term, ignore lastIndex
-		{e.lastIndex() - 1, 2, false},
-		{e.lastIndex(), 2, false},
-		{e.lastIndex() + 1, 2, false},
+		{e.LastIndex() - 1, 2, false},
+		{e.LastIndex(), 2, false},
+		{e.LastIndex() + 1, 2, false},
 		// equal term, lager lastIndex wins
-		{e.lastIndex() - 1, 3, false},
-		{e.lastIndex(), 3, true},
-		{e.lastIndex() + 1, 3, true},
+		{e.LastIndex() - 1, 3, false},
+		{e.LastIndex(), 3, true},
+		{e.LastIndex() + 1, 3, true},
 	}
 	for i := 0; i < len(tests); i++ {
-		t := &tests[i]
-		result := e.IsUpToDate(t.idx, t.term)
-		if result != t.result {
-			panic(fmt.Errorf("#%d: uptodate = %v, want %v", i, result, t.result))
+		test := &tests[i]
+		result := e.IsUpToDate(test.idx, test.term)
+		if result != test.result {
+			t.Fatalf("#%d: uptodate = %v, want %v", i, result, test.result)
 		}
 	}
 }
@@ -259,14 +230,14 @@ func TestLogHolder_Slice(t *testing.T) {
 	}
 
 	for i := 0; i < len(tests); i++ {
-		t := &tests[i]
+		test := &tests[i]
 		e := RebuildLogHolder(1, prevEntries)
-		entries := e.Slice(t.lo, t.hi)
+		entries := e.Slice(test.lo, test.hi)
 		for j := range entries {
 			en := entries[j]
-			if en.Term != t.wents[j].Term || en.Index != t.wents[j].Index {
-				panic(fmt.Errorf("#%d: entry not expect %d [%d Term: %d] != [%d Term: %d]",
-					i, j, en.Index, en.Term, t.wents[j].Index, t.wents[j].Term))
+			if en.Term != test.wents[j].Term || en.Index != test.wents[j].Index {
+				t.Fatalf("#%d: entry not expect %d [%d Term: %d] != [%d Term: %d]",
+					i, j, en.Index, en.Term, test.wents[j].Index, test.wents[j].Term)
 			}
 		}
 	}
@@ -315,14 +286,39 @@ func TestLogHolder_Term(t *testing.T) {
 	for i := 0; i < len(tests); i++ {
 		term := e.Term(tests[i].index)
 		if term != tests[i].term {
-			panic(fmt.Errorf("#%d: at = %d, want = %d, get = %d",
-				i, tests[i].index, tests[i].term, term))
+			t.Fatalf("#%d: at = %d, want = %d, get = %d",
+				i, tests[i].index, tests[i].term, term)
 		}
 	}
 }
 
 func TestLogHolder_TryAppend(t *testing.T) {
+	tests := []struct {
+		origin          []raftpd.Entry
+		entries         []raftpd.Entry
+		prvIdx, prvTerm uint64
+		wents           []raftpd.Entry
+		widx            uint64
+		wres            bool
+	}{
+		// empty
+		{makeEntries(1, 2), makeEntries(), 2, 2, makeEntries(1, 2), 2, true},
+		// append
+		{makeEntries(1), makeEntries(2), 1, 1, makeEntries(1, 2), 2, true},
+		// truncate and append
+		{makeEntries(1, 2, 3), makeEntries(3), 1, 1, makeEntries(1, 2, 3), 2, true}, // should be 3
+		// conflict
+		//{makeEntries(1), makeEntries(), 1, 2, makeEntries(1), conf.InvalidIndex, false},
+	}
 
+	for i, test := range tests {
+		holder := RebuildLogHolder(1, test.origin)
+		idx, res := holder.TryAppend(test.prvIdx, test.prvTerm, test.entries)
+		compareEntries(t, i, holder.entries, test.wents)
+		if idx != test.widx && res != test.wres {
+			t.Fatalf("error")
+		}
+	}
 }
 
 func TestDrain(t *testing.T) {
@@ -340,18 +336,18 @@ func TestDrain(t *testing.T) {
 	}
 
 	for i := 0; i < len(tests); i++ {
-		t := &tests[i]
-		entries := drain(t.entries, t.to)
+		test := &tests[i]
+		entries := drain(test.entries, test.to)
 
-		if len(entries) != len(t.want) {
-			panic(fmt.Sprintf("#%d: len: %d, want: %d", i, len(entries), len(t.want)))
+		if len(entries) != len(test.want) {
+			t.Fatalf("#%d: len: %d, want: %d", i, len(entries), len(test.want))
 		}
 
 		for j := 0; j < len(entries); j++ {
-			if entries[j].Index != t.want[j].Index ||
-				entries[j].Term != t.want[j].Term {
-				panic(fmt.Sprintf("#%d: idx: %d, term: %d, want idx: %d, want term: %d",
-					i, entries[j].Index, entries[j].Term, t.want[j].Index, t.want[j].Term))
+			if entries[j].Index != test.want[j].Index ||
+				entries[j].Term != test.want[j].Term {
+				t.Fatalf("#%d: idx: %d, term: %d, want idx: %d, want term: %d",
+					i, entries[j].Index, entries[j].Term, test.want[j].Index, test.want[j].Term)
 			}
 		}
 	}
