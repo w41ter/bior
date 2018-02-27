@@ -29,9 +29,9 @@ type Raft struct {
 	raft core.Raft
 	wal  *logStorage
 
-	timer *utils.Timer
-	callback     Application
-	transport    Transporter
+	timer     *utils.Timer
+	callback  Application
+	transport Transporter
 }
 
 // MakeRaft return a instance of Raft.
@@ -175,7 +175,9 @@ func (raft *Raft) handleRaftReady() {
 	// send messages accumulation at raft.msg
 	for i := 0; i < len(ready.Messages); i++ {
 		raftMsg := &ready.Messages[i]
-		raft.transport.Send(raftMsg.To, raftMsg)
+		if err := raft.transport.Send(raftMsg.To, raftMsg); err != nil {
+			raft.Unreachable(raftMsg.To)
+		}
 	}
 }
 

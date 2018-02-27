@@ -74,6 +74,7 @@ func (node *RawNode) Unreachable(peer uint64) {
 	msg := raftpd.Message{
 		From: peer,
 		To: conf.InvalidID,
+		Term: node.term,
 		MsgType: raftpd.MsgUnreachable,
 	}
 	node.Step(&msg)
