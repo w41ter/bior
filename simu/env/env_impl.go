@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,8 +12,8 @@ import (
 	"github.com/thinkermao/network-simu-go"
 )
 
-const readTimeout = 3000
-const writeTimeout = 1000
+const readTimeout = 300
+const writeTimeout = 150
 const walDir = "./wal_log/"
 
 // func randString(n int) string {
@@ -29,13 +28,12 @@ type Environment struct {
 	t          *testing.T
 	net        network.Network
 	totalNodes int
-	done       int32
 	apps       []raft.Application
 }
 
 // MakeEnvironment return instance of Environment.
 func MakeEnvironment(t *testing.T, num int, unrealiable bool) *Environment {
-	builder := network.CreateAliveBuilder(readTimeout, writeTimeout)
+	builder := network.CreateBuilder() //(readTimeout, writeTimeout)
 	env := &Environment{}
 	// create a full set of Rafts.
 	var apps []raft.Application
@@ -45,19 +43,21 @@ func MakeEnvironment(t *testing.T, num int, unrealiable bool) *Environment {
 			panic(err)
 		}
 
-		readCb := func(i int) func(int) {
-			return func (end int) {
-				env.apps[i].Disconnect(end)
-			}
-		}(i)
+		//readCb := func(i int) func(int) {
+		//	return func(end int) {
+		//		fmt.Println(env.apps[i].ID(), " unreachable ", end)
+		//		env.apps[i].Disconnect(end)
+		//	}
+		//}(i)
+		//
+		//writeCb := func(i int) func(int) {
+		//	return func(end int) {
+		//		fmt.Println(env.apps[i].ID(), " send heartbeat to ", end)
+		//		env.apps[i].SendHeartbeat(end)
+		//	}
+		//}(i)
 
-		writeCb := func(i int) func(int) {
-			return func(end int) {
-				env.apps[i].SendHeartbeat(end)
-			}
-		}(i)
-
-		handler := builder.AddEndpoint(readCb, writeCb)
+		handler := builder.AddEndpoint() //readCb, writeCb)
 		apps = append(apps, raft.MakeApp(dir, handler, env))
 	}
 
@@ -125,7 +125,6 @@ func (env *Environment) Cleanup() {
 			env.apps[i].Shutdown()
 		}
 	}
-	atomic.StoreInt32(&env.done, 1)
 	if err := os.RemoveAll(walDir); err != nil {
 		panic(err)
 	}
@@ -159,7 +158,7 @@ func (env *Environment) SetUnreliable(unrel bool) {
 // try a few times in case re-elections are needed.
 func (env *Environment) CheckOneLeader() int {
 	for iters := 0; iters < 10; iters++ {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(raft.ElectionTimeout * time.Millisecond)
 		leaders := make(map[int][]int)
 		for i := 0; i < env.totalNodes; i++ {
 			if env.net.IsEnable(i) {
