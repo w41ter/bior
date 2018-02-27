@@ -10,8 +10,19 @@ import (
 	"github.com/thinkermao/bior/utils"
 )
 
+func quorum(len int) int {
+	return len/2 + 1
+}
+
+// send send message to remote peers.
 func (c *core) send(msg *raftpd.Message) {
-	msg.Term = c.term
+	if msg.MsgType == raftpd.MsgPreVoteRequest {
+		/* request pre vote: next term */
+		msg.Term = c.term + 1
+	} else {
+		msg.Term = c.term
+	}
+
 	msg.From = c.id
 	c.callback.send(msg)
 }
@@ -60,7 +71,8 @@ func (c *core) becomeLeader() {
 	c.reset(c.term)
 	c.leaderID = c.id
 	c.state = RoleLeader
-	c.vote = c.id
+
+	utils.Assert(c.vote == c.id, "leader will vote itself")
 
 	log.Infof("%v become leader at %d", c.id, c.term)
 }
@@ -73,22 +85,19 @@ func (c *core) becomeCandidate() {
 	c.vote = c.id
 	c.state = RoleCandidate
 
-	for i := 0; i < len(c.nodes); i++ {
-		c.nodes[i].ResetVoteState()
-	}
+	c.resetNodesVoteState()
 
 	log.Infof("%v become candidate at %d", c.id, c.term)
 }
 
 func (c *core) becomePreCandidate() {
 	c.reset(c.term)
+
 	// as semantic said, will be InvalidID.
 	c.leaderID = conf.InvalidID
 	c.state = RolePrevCandidate
 
-	for i := 0; i < len(c.nodes); i++ {
-		c.nodes[i].ResetVoteState()
-	}
+	c.resetNodesVoteState()
 
 	// Becoming a pre-candidate changes our state,
 	// but doesn't change anything else. In particular it does not increase
@@ -96,35 +105,43 @@ func (c *core) becomePreCandidate() {
 	log.Infof("%x became pre-candidate at term %d", c.id, c.term)
 }
 
-func (c *core) campaign(ct campaignState) {
+func (c *core) preCampaign() {
 	utils.Assert(c.state != RoleLeader,
-		"%d invalid translation [Leader => PreCandidate/Candidate]", c.id)
+		"%d invalid translation [Leader => PreCandidate]", c.id)
 
-	msg := raftpd.Message{}
-	msg.LogIndex = c.log.LastIndex()
-	msg.LogTerm = c.log.LastTerm()
-	if ct == campaignPreCandidate {
-		msg.Term = c.term + 1
-		msg.MsgType = raftpd.MsgPreVoteRequest
-		c.becomePreCandidate()
-	} else {
-		msg.Term = c.term
-		msg.MsgType = raftpd.MsgVoteRequest
-		c.becomeCandidate()
+	c.becomePreCandidate()
+
+	msg := raftpd.Message{
+		LogIndex: c.log.LastIndex(),
+		LogTerm: c.log.LastTerm(),
+		MsgType: raftpd.MsgPreVoteRequest,
 	}
+	c.sendToNodes(&msg)
+}
 
+func (c *core) campaign() {
+	utils.Assert(c.state != RoleLeader,
+		"%d invalid translation [Leader => Candidate]", c.id)
+
+	c.becomeCandidate()
+
+	msg := raftpd.Message{
+		LogIndex: c.log.LastIndex(),
+		LogTerm: c.log.LastTerm(),
+		MsgType: raftpd.MsgVoteRequest,
+	}
+	c.sendToNodes(&msg)
+}
+
+func (c *core) sendToNodes(msg *raftpd.Message) {
 	for i := 0; i < len(c.nodes); i++ {
 		node := c.nodes[i]
 		msg.To = node.ID
 
 		log.Debugf("%x [term: %d, index: %d] send %v request to %x at term %d",
 			c.id, c.log.LastTerm(), c.log.LastIndex(), msg.MsgType, msg.To, c.term)
-		c.send(&msg)
+		c.send(msg)
 	}
-}
-
-func quorum(len int) int {
-	return len/2 + 1
 }
 
 func (c *core) quorum() int {
@@ -169,20 +186,12 @@ func (c *core) broadcastVictory() {
 	/* noop: empty log ensure commit old Term logs */
 	entry := raftpd.Entry{
 		Type:  raftpd.EntryBroadcast,
-		Index: c.log.LastIndex() + 1,
+		Index: c.nextIndex(),
 		Term:  c.term,
-		Data:  nil,
 	}
-	entries := []raftpd.Entry{entry}
-	c.log.Append(entries)
+	c.log.Append([]raftpd.Entry{entry})
 
-	// When a leader first comes to power,
-	// it initializes all nextIndex values to the index just after the
-	// last one in its log (11 in Figure 7).
-	lastIndex := c.log.LastIndex()
-	for i := 0; i < len(c.nodes); i++ {
-		c.nodes[i].ToProbe(lastIndex + 1)
-	}
+	c.resetNodesProgress()
 
 	log.Debugf("%d [Term: %d] begin broadcast self's victory ", c.id, c.term)
 
@@ -228,4 +237,24 @@ func (c *core) applyEntries() {
 		}
 		c.callback.applyEntry(entry)
 	}
+}
+
+func (c *core) resetNodesVoteState() {
+	for i := 0; i < len(c.nodes); i++ {
+		c.nodes[i].ResetVoteState()
+	}
+}
+
+func (c *core) resetNodesProgress() {
+	// When a leader first comes to power,
+	// it initializes all nextIndex values to the index just after the
+	// last one in its log (11 in Figure 7).
+	nextIndex := c.nextIndex()
+	for i := 0; i < len(c.nodes); i++ {
+		c.nodes[i].ToProbe(nextIndex)
+	}
+}
+
+func (c *core) nextIndex() uint64 {
+	return c.log.LastIndex() + 1
 }

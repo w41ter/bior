@@ -11,15 +11,8 @@ import (
 	"github.com/thinkermao/bior/utils/pd"
 )
 
-type campaignState int
-
-const (
-	campaignPreCandidate campaignState = iota
-	campaignCandidate
-)
-
 type application interface {
-	// send messate to other node.
+	// send message to other node.
 	send(msg *raftpd.Message)
 
 	// save read state
@@ -33,7 +26,7 @@ type application interface {
 	// should call ApplySnapshot to rebuild log infos.
 	applySnapshot(snapshot *raftpd.Snapshot)
 
-	// readSnapshot return lastest snapshot has been persisted
+	// readSnapshot return latest snapshot has been persisted
 	// from state machine.
 	readSnapshot() *raftpd.Snapshot
 }
@@ -198,7 +191,7 @@ func (c *core) Step(msg *raftpd.Message) {
 	if msg.Term < c.term {
 		log.Debugf("%d [term: %d] ignore a %s message with lower term from: %d [term: %d]",
 			c.id, c.term, msg.MsgType, msg.From, msg.Term)
-		// don't send reject without implemention pre-candiate,
+		// don't send reject without implement pre-candidate,
 		// because candidate will effect leader. but no one tell
 		// leader to update itself until new leader broadcast it's victory.
 		//
@@ -251,7 +244,7 @@ func (c *core) Periodic(millsSinceLastPeriod int) {
 		}
 	} else if c.randomizedElectionTick <= c.timeElapsed {
 		if len(c.nodes) > 1 {
-			c.campaign(campaignPreCandidate)
+			c.preCampaign()
 		}
 	}
 }

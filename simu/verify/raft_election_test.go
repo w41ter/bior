@@ -12,9 +12,9 @@ import "github.com/thinkermao/bior/simu/env"
 // (much more than the paper's range of timeouts).
 const RaftElectionTimeout = 1000 * time.Millisecond
 
-func TestRaft_InitialElection(t *testing.T) {
+	func TestRaft_InitialElection(t *testing.T) {
 	servers := 3
-	env := envior.MakeEnviornment(t, servers, false)
+	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
 
 	fmt.Printf("Test: initial election ...\n")
@@ -35,7 +35,7 @@ func TestRaft_InitialElection(t *testing.T) {
 
 func TestRaft_ReElection(t *testing.T) {
 	servers := 3
-	env := envior.MakeEnviornment(t, servers, false)
+	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
 
 	fmt.Printf("Test: election after network failure ...\n")

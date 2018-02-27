@@ -1,9 +1,12 @@
 package raftpd
 
+import "encoding/gob"
+
 type MessageType int
 
 // Message from local:
-// - Unreachable
+// - Unreachable	infer whether remote is online. such as generate at
+// 	heartbeat checkout failed by local transport.
 //
 // Message from leader:
 // - Append request
@@ -135,4 +138,9 @@ var ConfChangeString = []string{
 
 func (t ConfChangeType) String() string {
 	return ConfChangeString[t]
+}
+
+func init() {
+	gob.Register(Message{})
+	gob.Register(ConfChange{})
 }

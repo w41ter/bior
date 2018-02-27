@@ -7,7 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Messager used by Marshal/Unmashal
+// Messager used by Marshal/Unmarshal
 type Messager interface {
 	Reset()
 }

@@ -19,7 +19,7 @@ type Application interface {
 	ReadSnapshot() *raftpd.Snapshot
 }
 
-// Raft is a implementions of raft consensus algorithm,
+// Raft is a implements of raft consensus algorithm,
 // with log storage and periodic timer. Raft is thread-safty.
 type Raft struct {
 	mutex sync.Mutex
@@ -58,7 +58,7 @@ func MakeRaft(
 
 	raft.raft = core.MakeRaft(&config, raft)
 
-	w, err := CreateLogStorate(walDir, conf.InvalidIndex+1)
+	w, err := CreateLogStorage(walDir, conf.InvalidIndex+1)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +112,7 @@ func (raft *Raft) GetState() (uint64, bool) {
 // Kill is the only one global method no need mutex.
 func (raft *Raft) Kill() {
 	raft.timerStopper <- struct{}{}
+	raft.wal.close()
 }
 
 // Read operate not sync disk
@@ -212,4 +213,11 @@ func (raft *Raft) Step(msg *raftpd.Message) {
 	defer raft.mutex.Unlock()
 
 	raft.raft.Step(msg)
+}
+
+func (raft *Raft) Unreachable(peer uint64) {
+	raft.mutex.Lock()
+	defer raft.mutex.Unlock()
+
+	raft.raft.Unreachable(peer)
 }

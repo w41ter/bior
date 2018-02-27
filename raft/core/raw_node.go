@@ -70,6 +70,15 @@ func MakeRawNode(config *conf.Config, app NodeApplication) *RawNode {
 	return node
 }
 
+func (node *RawNode) Unreachable(peer uint64) {
+	msg := raftpd.Message{
+		From: peer,
+		To: conf.InvalidID,
+		MsgType: raftpd.MsgUnreachable,
+	}
+	node.Step(&msg)
+}
+
 func (node *RawNode) Ready() Ready {
 	ready := Ready{}
 

@@ -9,7 +9,11 @@ import (
 )
 
 func init() {
-	file, err := os.Create("/tmp/log/info")
+	if err := os.MkdirAll("./log/", 0777); err != nil {
+		panic(err)
+	}
+
+	file, err := os.Create("./log/info")
 	if err != nil {
 		panic(err)
 	}

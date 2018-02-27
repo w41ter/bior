@@ -8,7 +8,7 @@ import (
 	"github.com/thinkermao/bior/raft/proto"
 )
 
-// implementions of raft.Application interface.
+// implements of raft.Application interface.
 
 func (app *application) ApplyEntry(entry *raftpd.Entry) {
 	log.Debugf("[test] id: %d apply entry: %v", app.id, entry)

@@ -1,15 +1,11 @@
 package peer
 
 import (
-	"time"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/thinkermao/bior/raft/core/conf"
 	"github.com/thinkermao/bior/raft/proto"
 	"github.com/thinkermao/bior/utils"
 )
-
-const wakeUpDuration = 1 // 1 second timeout
 
 // Node maintains the same information as other nodes in the raft group.
 type Node struct {
@@ -57,10 +53,6 @@ type Node struct {
 	// When a leader receives a reply, the previous inflights should
 	// be freed by calling inflights.freeTo.
 	ins inFlights
-
-	// lastModified is the time of last operation, used to wake up
-	// paused node after remote node crashed and restart.
-	lastModified time.Time
 }
 
 // MakeNode create instance for remote peer.
@@ -77,7 +69,6 @@ func MakeNode(belong, id, nextIdx uint64) *Node {
 		paused:          false,
 		pendingSnapshot: conf.InvalidIndex,
 		ins:             makeInFlights(inFlightWindow),
-		lastModified:    time.Now(),
 	}
 	return node
 }
@@ -152,8 +143,8 @@ func (n *Node) HandleAppendEntries(reject bool, index uint64, hintIdx uint64) bo
 			return false
 		}
 		n.NextIdx = utils.MinUint64(index, hintIdx+1)
-		if n.NextIdx < 1 {
-			n.NextIdx = 1
+		if n.NextIdx <= conf.InvalidIndex {
+			n.NextIdx = conf.InvalidIndex + 1
 		}
 		log.Debugf("%d node: %d update next index: %d",
 			n.belongID, n.ID, n.NextIdx)
@@ -172,12 +163,13 @@ func (n *Node) SendSnapshot(idx uint64) {
 
 	n.pendingSnapshot = idx
 	n.state = nodeStateSnapshot
-	n.lastModified = time.Now()
 }
 
 // UpdateVoteState set vote by reject, if true vote
 // set to voteReject, otherwise set to voteGranted.
 func (n *Node) UpdateVoteState(reject bool) {
+	utils.Assert(n.Vote == VoteNone, "change vote state twice")
+
 	if reject {
 		n.Vote = VoteReject
 	} else {
@@ -197,7 +189,7 @@ func (n *Node) optimisticUpdate(idx uint64) {
 	n.ins.add(idx)
 }
 
-// SendEntries change fileds by entries.
+// SendEntries change fields by entries.
 func (n *Node) SendEntries(entries []raftpd.Entry) {
 	switch n.state {
 	case nodeStateProbe:
@@ -205,15 +197,13 @@ func (n *Node) SendEntries(entries []raftpd.Entry) {
 		n.pause()
 	case nodeStateReplicate:
 		if len(entries) != 0 {
-			// optimistically increase the next when in ProgressStateReplicate
+			// optimistically increase the next when in nodeReplicate
 			lastIndex := entries[len(entries)-1].Index
 			n.optimisticUpdate(lastIndex)
 		}
 	default:
 		log.Fatalf("%x is sending append in unhandled state %s", n.ID, n.state)
 	}
-
-	n.lastModified = time.Now()
 }
 
 // IsPaused test whether reached pause status.
@@ -228,20 +218,6 @@ func (n *Node) IsPaused() bool {
 	default:
 		panic("unreachable")
 	}
-}
-
-// WakeUp wake up node, if remote node crashed and restart.
-func (n *Node) WakeUp() bool {
-	now := time.Now()
-	if now.Sub(n.lastModified).Seconds() < wakeUpDuration {
-		return false
-	}
-	n.lastModified = now
-	n.HandleUnreachable()
-
-	log.Debugf("%d node: %d wake up because timeout", n.belongID, n.ID)
-
-	return true
 }
 
 // ToProbe transfer status to probe, and reset fileds.

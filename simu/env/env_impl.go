@@ -13,7 +13,9 @@ import (
 	"github.com/thinkermao/network-simu-go"
 )
 
-const walDir = "/tmp/raft/"
+const readTimeout = 3000
+const writeTimeout = 1000
+const walDir = "./wal_log/"
 
 // func randString(n int) string {
 // 	b := make([]byte, 2*n)
@@ -22,8 +24,8 @@ const walDir = "/tmp/raft/"
 // 	return s[0:n]
 // }
 
-// Enviornment support enviornment for test.
-type Enviornment struct {
+// Environment support Environment for test.
+type Environment struct {
 	t          *testing.T
 	net        network.Network
 	totalNodes int
@@ -31,19 +33,31 @@ type Enviornment struct {
 	apps       []raft.Application
 }
 
-// MakeEnviornment return instance of Enviornment.
-func MakeEnviornment(t *testing.T, num int, unrealiable bool) *Enviornment {
-	builder := network.CreateBuilder()
-	env := &Enviornment{}
+// MakeEnvironment return instance of Environment.
+func MakeEnvironment(t *testing.T, num int, unrealiable bool) *Environment {
+	builder := network.CreateAliveBuilder(readTimeout, writeTimeout)
+	env := &Environment{}
 	// create a full set of Rafts.
-	apps := []raft.Application{}
+	var apps []raft.Application
 	for i := 0; i < num; i++ {
 		dir := filepath.Join(walDir, strconv.Itoa(i))
 		if err := os.MkdirAll(dir, 0777); err != nil {
 			panic(err)
 		}
 
-		handler := builder.AddEndpoint()
+		readCb := func(i int) func(int) {
+			return func (end int) {
+				env.apps[i].Disconnect(end)
+			}
+		}(i)
+
+		writeCb := func(i int) func(int) {
+			return func(end int) {
+				env.apps[i].SendHeartbeat(end)
+			}
+		}(i)
+
+		handler := builder.AddEndpoint(readCb, writeCb)
 		apps = append(apps, raft.MakeApp(dir, handler, env))
 	}
 
@@ -62,7 +76,7 @@ func MakeEnviornment(t *testing.T, num int, unrealiable bool) *Enviornment {
 }
 
 // CheckApply check consistency of applied entries.
-func (env *Enviornment) CheckApply(id, index, value int) error {
+func (env *Environment) CheckApply(id, index, value int) error {
 	for j := 0; j < len(env.apps); j++ {
 		app := env.apps[j]
 		if v, ok := app.LogAt(index); ok && v != value {
@@ -75,14 +89,14 @@ func (env *Enviornment) CheckApply(id, index, value int) error {
 }
 
 // Crash1 shut down a Raft server but save its persistent state.
-func (env *Enviornment) Crash1(i int) {
+func (env *Environment) Crash1(i int) {
 	env.Disconnect(i)
 	env.apps[i].Shutdown()
 }
 
 // Start1 start or re-start a Raft.
 // if One already exists, "kill" it first.
-func (env *Enviornment) Start1(i int) {
+func (env *Environment) Start1(i int) {
 	env.Crash1(i)
 
 	/* read all nodes netId */
@@ -95,53 +109,55 @@ func (env *Enviornment) Start1(i int) {
 }
 
 // Propose send propose to raft.
-func (env *Enviornment) Propose(id int, num int) (uint64, uint64, bool) {
+func (env *Environment) Propose(id int, num int) (uint64, uint64, bool) {
 	return env.apps[id].Propose(num)
 }
 
 // GetState return the state of raft.
-func (env *Enviornment) GetState(id int) (uint64, bool) {
+func (env *Environment) GetState(id int) (uint64, bool) {
 	return env.apps[id].GetState()
 }
 
 // Cleanup kill all data
-func (env *Enviornment) Cleanup() {
+func (env *Environment) Cleanup() {
 	for i := 0; i < len(env.apps); i++ {
 		if env.apps[i] != nil {
 			env.apps[i].Shutdown()
 		}
 	}
 	atomic.StoreInt32(&env.done, 1)
-	os.RemoveAll(walDir)
+	if err := os.RemoveAll(walDir); err != nil {
+		panic(err)
+	}
 }
 
 // Connect  attach server i to the net.
-func (env *Enviornment) Connect(i int) {
+func (env *Environment) Connect(i int) {
 	// fmt.Printf("Connect(%d)\n", i)
 
 	env.net.Enable(i)
 }
 
 // Disconnect detach server i from the net.
-func (env *Enviornment) Disconnect(i int) {
+func (env *Environment) Disconnect(i int) {
 	// fmt.Printf("Disconnect(%d)\n", i)
 
 	env.net.Disable(i)
 }
 
 // GetCount how many counts of network call.
-func (env *Enviornment) GetCount(server int) int {
+func (env *Environment) GetCount(server int) int {
 	return int(env.net.GetCount(server))
 }
 
 // SetUnreliable make network become unrealiable.
-func (env *Enviornment) SetUnreliable(unrel bool) {
+func (env *Environment) SetUnreliable(unrel bool) {
 	env.net.SetReliable(!unrel)
 }
 
 // CheckOneLeader check that there's exactly One leader.
 // try a few times in case re-elections are needed.
-func (env *Enviornment) CheckOneLeader() int {
+func (env *Environment) CheckOneLeader() int {
 	for iters := 0; iters < 10; iters++ {
 		time.Sleep(500 * time.Millisecond)
 		leaders := make(map[int][]int)
@@ -172,7 +188,7 @@ func (env *Enviornment) CheckOneLeader() int {
 }
 
 // CheckTerms check that everyone agrees on the term.
-func (env *Enviornment) CheckTerms() int {
+func (env *Environment) CheckTerms() int {
 	term := -1
 	for i := 0; i < env.totalNodes; i++ {
 		if env.net.IsEnable(i) {
@@ -188,7 +204,7 @@ func (env *Enviornment) CheckTerms() int {
 }
 
 // CheckNoLeader check that there's no leader
-func (env *Enviornment) CheckNoLeader() {
+func (env *Environment) CheckNoLeader() {
 	for i := 0; i < env.totalNodes; i++ {
 		if env.net.IsEnable(i) {
 			_, isLeader := env.apps[i].GetState()
@@ -200,7 +216,7 @@ func (env *Enviornment) CheckNoLeader() {
 }
 
 // CommittedNumber how many servers think a log entry is committed?
-func (env *Enviornment) CommittedNumber(index int) (int, interface{}) {
+func (env *Environment) CommittedNumber(index int) (int, interface{}) {
 	count := 0
 	cmd := -1
 	for i := 0; i < len(env.apps); i++ {
@@ -225,7 +241,7 @@ func (env *Enviornment) CommittedNumber(index int) (int, interface{}) {
 
 // Wait for at least n servers to commit.
 // but don't Wait forever.
-func (env *Enviornment) Wait(index int, n int, startTerm int) interface{} {
+func (env *Environment) Wait(index int, n int, startTerm int) interface{} {
 	to := 10 * time.Millisecond
 	for iters := 0; iters < 30; iters++ {
 		nd, _ := env.CommittedNumber(index)
@@ -262,7 +278,7 @@ func (env *Enviornment) Wait(index int, n int, startTerm int) interface{} {
 // same value, since CommittedNumber() checks this,
 // as do the threads that read from applyCh.
 // returns index.
-func (env *Enviornment) One(cmd int, expectedServers int) int {
+func (env *Environment) One(cmd int, expectedServers int) int {
 	t0 := time.Now()
 	starts := 0
 	for time.Since(t0).Seconds() < 10 {

@@ -1,9 +1,7 @@
 package peer
 
 import (
-	"fmt"
 	"testing"
-	"time"
 )
 
 func TestNode_isPaused(t *testing.T) {
@@ -64,72 +62,6 @@ func TestNode_isPaused(t *testing.T) {
 		if res != test.paused {
 			t.Fatalf("#%d: paused wrong, want: %v, get: %v",
 				i, test.paused, res)
-		}
-	}
-}
-
-func TestNode_WakeUp(t *testing.T) {
-	tests := []struct {
-		node   *Node
-		sleep  int
-		want   bool
-		wstate nodeState
-	}{
-		// probe paused but wake up failed.
-		{
-			node: &Node{
-				state:  nodeStateProbe,
-				paused: true,
-			},
-			sleep:  0,
-			want:   false,
-			wstate: nodeStateProbe,
-		},
-		// probe paused and wake up
-		{
-			node: &Node{
-				state:  nodeStateProbe,
-				paused: true,
-			},
-			sleep:  1000,
-			want:   true,
-			wstate: nodeStateProbe,
-		},
-		{
-			node: &Node{
-				state: nodeStateReplicate,
-				ins: inFlights{
-					start:  0,
-					count:  10,
-					buffer: make([]uint64, 10),
-				},
-			},
-			sleep:  1000,
-			want:   true,
-			wstate: nodeStateProbe,
-		},
-		{
-			node: &Node{
-				state: nodeStateSnapshot,
-			},
-			sleep:  1000,
-			want:   true,
-			wstate: nodeStateProbe,
-		},
-	}
-
-	for i, test := range tests {
-		now := time.Now()
-		last := now.Add(-time.Duration(test.sleep) * time.Millisecond)
-		fmt.Printf("test last: %v, now: %v\n", last, now)
-		test.node.lastModified = last
-		res := test.node.WakeUp()
-		if res != test.want {
-			t.Fatalf("#%d: wakeup result: %v, want: %v", i, res, test.want)
-		}
-		if test.wstate != test.node.state {
-			t.Fatalf("#%d: wakeup state: %v, want: %v",
-				i, test.node.state, test.wstate)
 		}
 	}
 }

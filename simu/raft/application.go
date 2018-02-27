@@ -1,6 +1,6 @@
 package raft
 
-// Application provides a raft implemention.
+// Application provides a raft implements.
 type Application interface {
 	ID() int
 	Kill()
@@ -13,4 +13,7 @@ type Application interface {
 
 	LogLength() int
 	LogAt(index int) (int, bool)
+
+	SendHeartbeat(end int)
+	Disconnect(end int)
 }

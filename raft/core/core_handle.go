@@ -107,7 +107,7 @@ func (c *core) handleReadIndexRequest(msg *raftpd.Message) {
 func (c *core) handleAppendEntries(msg *raftpd.Message) {
 	reply := raftpd.Message{
 		MsgType: raftpd.MsgAppendResponse,
-		From:    c.id,
+		To:    msg.From,
 	}
 	if c.log.CommitIndex() > msg.LogIndex {
 		log.Infof("%d [Term: %d, commit: %d] reject expired append Entries "+
@@ -143,7 +143,7 @@ func (c *core) handleAppendEntries(msg *raftpd.Message) {
 }
 
 func (c *core) handleAppendEntriesResponse(msg *raftpd.Message) {
-	log.Debugf("%d receieved append entries response from %d [rj: %v, idx: %d, hint: %d]",
+	log.Debugf("%d received append entries response from %d [rj: %v, idx: %d, hint: %d]",
 		c.id, msg.From, msg.Reject, msg.Index, msg.RejectHint)
 
 	node := c.getNodeByID(msg.From)
@@ -314,7 +314,7 @@ func (c *core) handleVoteResponse(msg *raftpd.Message) {
 			c.becomeLeader()
 			c.broadcastVictory()
 		} else {
-			c.campaign(campaignCandidate)
+			c.campaign()
 		}
 		return
 	}
@@ -355,8 +355,8 @@ func (c *core) broadcastAppend() {
 	firstIndex := c.log.FirstIndex()
 	for i := 0; i < len(c.nodes); i++ {
 		node := c.nodes[i]
-		/* ignore paused and not expired node */
-		if node.IsPaused() && !node.WakeUp() {
+		/* ignore paused node */
+		if node.IsPaused() {
 			continue
 		}
 

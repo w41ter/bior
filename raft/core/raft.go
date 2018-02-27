@@ -30,6 +30,8 @@ type Raft interface {
 
 	Ready() Ready
 	ReadStatus() (uint64, bool)
+
+	Unreachable(peer uint64)
 }
 
 // MakeRaft return a Raft interface.

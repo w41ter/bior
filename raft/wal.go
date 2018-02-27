@@ -14,7 +14,7 @@ type logStorage struct {
 	wal *wal.Wal
 }
 
-func CreateLogStorate(walDir string, index uint64) (*logStorage, error) {
+func CreateLogStorage(walDir string, index uint64) (*logStorage, error) {
 	w, err := wal.Create(walDir, index)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (ls *logStorage) save(state *raftpd.HardState, entries []raftpd.Entry) erro
 		return errEmptyEntries
 	}
 
-	errorChs := []<-chan error{}
+	var errorChs []<-chan error
 	for i := 0; i < len(entries); i++ {
 		entry := &entries[i]
 		ch, err := ls.saveEntry(entry)
@@ -103,4 +103,8 @@ func (ls *logStorage) save(state *raftpd.HardState, entries []raftpd.Entry) erro
 
 func (ls *logStorage) sync() error {
 	return <-ls.wal.Sync()
+}
+
+func (ls *logStorage) close() error {
+	return ls.wal.Close()
 }

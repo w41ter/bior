@@ -6,9 +6,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/thinkermao/bior/raft"
-	"github.com/thinkermao/bior/raft/proto"
 	"github.com/thinkermao/bior/utils/pd"
 	"github.com/thinkermao/network-simu-go"
+	"github.com/thinkermao/bior/raft/proto"
 )
 
 const electionTimeout = 2000
@@ -69,22 +69,30 @@ func (app *application) getPersist() *Persister {
 }
 
 func (app *application) handleMessage(from int, data []byte) {
-	raft := app.getRaft()
-	if raft == nil {
+	rf := app.getRaft()
+	if rf == nil {
 		return
 	}
 
-	var msg raftpd.Message
-	pd.MustUnmarshal(&msg, data)
-
-	log.Debugf("app id: %d received: %v", app.id, msg)
-
-	raft.Step(&msg)
+	var pkt Packet
+	pd.MustUnmarshal(&pkt, data)
+	switch pkt.PkgType {
+	case typeHeartbeat:
+		/* ignore */
+	case typeNormal:
+		log.Debugf("app id: %d received: %v", app.id, pkt.Msg)
+		msg := pkt.Msg.(raftpd.Message)
+		rf.Step(&msg)
+	}
 }
 
 func (app *application) Send(to uint64, msg pd.Messager) error {
 	log.Debugf("app id: %d send: %v", app.id, msg)
-	bytes := pd.MustMarshal(msg)
+	pkt := Packet{
+		PkgType: typeNormal,
+		Msg:     msg,
+	}
+	bytes := pd.MustMarshal(&pkt)
 	return app.handler.Call(int(to), bytes)
 }
 
@@ -147,36 +155,36 @@ func (app *application) LogAt(index int) (int, bool) {
 }
 
 func (app *application) Kill() {
-	raft := app.getRaft()
+	rf := app.getRaft()
 
-	if raft == nil {
+	if rf == nil {
 		return
 	}
 
-	raft.Kill()
+	rf.Kill()
 }
 
 func (app *application) Propose(num int) (uint64, uint64, bool) {
-	raft := app.getRaft()
+	rf := app.getRaft()
 
-	if raft == nil {
+	if rf == nil {
 		return 0, 0, false
 	}
 
 	bytes := [8]byte{}
 	binary.LittleEndian.PutUint64(bytes[:], uint64(num))
-	idx, term, isLeader := raft.Write(bytes[:])
+	idx, term, isLeader := rf.Write(bytes[:])
 	return idx, term, isLeader
 }
 
 func (app *application) GetState() (uint64, bool) {
-	raft := app.getRaft()
+	rf := app.getRaft()
 
-	if raft == nil {
+	if rf == nil {
 		return 0, false
 	}
 
-	return raft.GetState()
+	return rf.GetState()
 }
 
 func (app *application) ApplyError() error {
@@ -188,4 +196,19 @@ func (app *application) ApplyError() error {
 
 func (app *application) ID() int {
 	return app.handler.ID()
+}
+
+func (app *application) SendHeartbeat(end int) {
+	pkt := Packet{
+		PkgType: typeHeartbeat,
+	}
+	bytes := pd.MustMarshal(&pkt)
+	app.handler.Call(end, bytes)
+}
+
+func (app *application) Disconnect(end int) {
+	rf := app.getRaft()
+	if rf != nil {
+		rf.Unreachable(uint64(end))
+	}
 }
