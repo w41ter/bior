@@ -29,7 +29,7 @@ type Raft struct {
 	raft core.Raft
 	wal  *logStorage
 
-	timerStopper chan struct{}
+	timer *utils.Timer
 	callback     Application
 	transport    Transporter
 }
@@ -111,7 +111,7 @@ func (raft *Raft) GetState() (uint64, bool) {
 
 // Kill is the only one global method no need mutex.
 func (raft *Raft) Kill() {
-	raft.timerStopper <- struct{}{}
+	raft.timer.Stop()
 	raft.wal.close()
 }
 
@@ -183,7 +183,7 @@ func (raft *Raft) handleRaftReady() {
 // when tick, call periodic and handleRaftReady()
 func (raft *Raft) service(tickSize int) {
 	last := time.Now()
-	raft.timerStopper = utils.StartTimer(tickSize, func(time time.Time) {
+	raft.timer = utils.StartTimer(tickSize, func(time time.Time) {
 		// FIXME: Adjust time, because lock cost.
 		nanoseconds := time.Sub(last).Nanoseconds()
 		last = time
