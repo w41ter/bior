@@ -33,6 +33,26 @@ func TestRaft_InitialElection(t *testing.T) {
 	fmt.Printf("  ... Passed\n")
 }
 
+func TestRaft_PreVoteReject(t *testing.T) {
+	servers := 3
+	env := envior.MakeEnvironment(t, servers, false)
+	defer env.Cleanup()
+
+	fmt.Printf("Test: no election majority peer online ...\n")
+
+	leader1 := env.CheckOneLeader()
+	term1 := env.CheckTerms()
+
+	// if the one disconnects, no election should be propose.
+	env.Disconnect((leader1+1)%servers)
+	time.Sleep(2 * RaftElectionTimeout)
+	leader2 := env.CheckOneLeader()
+	term2 := env.CheckTerms()
+	if leader1 != leader2 || term1 != term2 {
+		fmt.Printf("there's quorum, no election should be propose")
+	}
+}
+
 func TestRaft_ReElection(t *testing.T) {
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
