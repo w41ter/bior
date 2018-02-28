@@ -1,7 +1,8 @@
 package holder
 
-import "testing"
 import (
+	"testing"
+
 	"github.com/thinkermao/bior/raft/proto"
 )
 

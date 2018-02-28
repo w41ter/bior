@@ -121,7 +121,7 @@ func (holder *LogHolder) Slice(lo, hi uint64) []raftpd.Entry {
 // Log Matching: if two logs contain an entry with the same index and term,
 // then the logs are identical in all entries up through the given index. §5.3
 func (holder *LogHolder) IsUpToDate(idx, term uint64) bool {
-	return term > holder.LastIndex() || (term == holder.LastTerm() && idx >= holder.LastIndex())
+	return term > holder.LastTerm() || (term == holder.LastTerm() && idx >= holder.LastIndex())
 }
 
 // LastIndex return the last index of current Entries,

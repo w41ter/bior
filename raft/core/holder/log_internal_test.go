@@ -1,7 +1,10 @@
 package holder
 
-import "testing"
-import "github.com/thinkermao/bior/raft/proto"
+import (
+	"testing"
+
+	"github.com/thinkermao/bior/raft/proto"
+)
 
 func TestLogHolder_getHintIndex(t *testing.T) {
 	type param struct {
