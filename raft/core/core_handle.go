@@ -260,7 +260,10 @@ func (c *core) handlePreVote(msg *raftpd.Message) {
 		To:      msg.From,
 		MsgType: raftpd.MsgPreVoteResponse,
 	}
-
+	// Leader Stickness property:
+	// 	Followers should reject new leaders, if from their point of view the
+	// existing leader is still functioning correctly.
+	//
 	// Reply false if last AppendEntries call was received less than election timeout ago.
 	// Reply false if term < currentTerm.
 	// Reply false if candidate's log isn't at least as up­to­date as receiver's log.

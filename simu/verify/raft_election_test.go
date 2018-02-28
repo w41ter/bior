@@ -99,6 +99,37 @@ func TestRaft_ReElection(t *testing.T) {
 	fmt.Printf("  ... Passed\n")
 }
 
+// Followers should reject new leaders, if from their point of
+// view the existing leader is still functioning correctly
 func TestRaft_LeaderStickness(t *testing.T) {
-	// TODO:
+	servers := 3
+	env := envior.MakeEnvironment(t, servers, false)
+	defer env.Cleanup()
+
+	fmt.Printf("Test: leader stickness ...\n")
+
+	// leader network failure
+	leader1 := env.CheckOneLeader()
+	env.Disconnect(leader1)
+
+	// new leader network failure
+	leader2 := env.CheckOneLeader()
+	env.Disconnect(leader2)
+
+	// old leader connected again
+	env.Connect(leader1)
+
+	// wait for new elected leader
+	leader3 := env.CheckOneLeader()
+
+	// all together now
+	env.Connect(leader2)
+
+	sleep(2 * raft.ElectionTimeout)
+
+	if leader := env.CheckOneLeader(); leader != leader3 {
+		t.Fatal("leader flip")
+	}
+
+	fmt.Printf("  ... Passed\n")
 }
