@@ -140,6 +140,11 @@ func (env *Environment) SetUnreliable(unrel bool) {
 	env.net.SetReliable(!unrel)
 }
 
+// SetLongDelay make network has randomized long delay.
+func (env *Environment) SetLongDelay(longDelay bool) {
+	env.net.SetLongDelays(longDelay)
+}
+
 // CheckOneLeader check that there's exactly One leader.
 // try a few times in case re-elections are needed.
 func (env *Environment) CheckOneLeader() int {

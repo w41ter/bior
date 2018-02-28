@@ -3,6 +3,7 @@ package verify
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -219,6 +220,35 @@ func TestRaft_BackupAgree(t *testing.T) {
 		env.Connect(i)
 	}
 	env.One(rand.Int(), servers)
+
+	fmt.Printf("  ... Passed\n")
+}
+
+// Delay 300ms
+func TestRaft_LongDelayAgree(t *testing.T) {
+	servers := 5
+	env := envior.MakeEnvironment(t, servers, false)
+	env.SetLongDelay(true)
+	defer env.Cleanup()
+
+	fmt.Printf("Test: long delay network agreement ...\n")
+
+	var wg sync.WaitGroup
+
+	for iters := 1; iters < 50; iters++ {
+		for j := 0; j < 4; j++ {
+			wg.Add(1)
+			go func(iters, j int) {
+				defer wg.Done()
+				env.One((100*iters)+j, 1)
+			}(iters, j)
+		}
+		env.One(iters, 1)
+	}
+
+	wg.Wait()
+
+	env.One(100, servers)
 
 	fmt.Printf("  ... Passed\n")
 }

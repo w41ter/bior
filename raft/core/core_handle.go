@@ -272,9 +272,11 @@ func (c *core) handlePreVote(msg *raftpd.Message) {
 		!c.log.IsUpToDate(msg.LogIndex, msg.LogTerm) {
 		/* rejected */
 		reply.Reject = true
+		log.Infof("%d [term: %d] reject pre vote request from %d", c.id, c.term, msg.From)
 	} else {
 		/* accept */
 		reply.Reject = false
+		log.Infof("%d [term: %d] accept vote request from %d", c.id, c.term, msg.From)
 	}
 
 	c.send(&reply)
@@ -295,6 +297,7 @@ func (c *core) handleVote(msg *raftpd.Message) {
 		log.Infof("%d [term: %d] accepted vote request from %d", c.id, c.term, msg.From)
 	} else {
 		reply.Reject = true
+		log.Infof("%d [term: %d] reject vote request from %d", c.id, c.term, msg.From)
 	}
 
 	c.send(&reply)

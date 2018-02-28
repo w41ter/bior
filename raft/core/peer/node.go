@@ -210,6 +210,7 @@ func (n *Node) SendEntries(entries []raftpd.Entry) {
 func (n *Node) IsPaused() bool {
 	switch n.state {
 	case nodeStateProbe:
+		// FIXME: it will blocking node if remote lose response.
 		return n.paused
 	case nodeStateReplicate:
 		return n.ins.full()
