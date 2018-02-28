@@ -13,7 +13,4 @@ type Application interface {
 
 	LogLength() int
 	LogAt(index int) (int, bool)
-
-	SendHeartbeat(end int)
-	Disconnect(end int)
 }

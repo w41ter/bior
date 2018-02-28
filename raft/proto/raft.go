@@ -1,6 +1,9 @@
 package raftpd
 
-import "encoding/gob"
+import (
+	"encoding/gob"
+	"fmt"
+)
 
 type HardState struct {
 	Vote   uint64
@@ -18,6 +21,16 @@ const (
 	EntryConfChange
 )
 
+var entryTypeStr = []string{
+	"Normal",
+	"Broadcast",
+	"ConfChange",
+}
+
+func (t EntryType) String() string {
+	return entryTypeStr[t]
+}
+
 type Entry struct {
 	Index uint64
 	Term  uint64
@@ -26,6 +39,11 @@ type Entry struct {
 }
 
 func (e *Entry) Reset() { *e = Entry{} }
+
+func (e *Entry) String() string {
+	return fmt.Sprintf("raftpd.Entry{idx: %d, term: %d, type: %v, data: %v}",
+		e.Index, e.Term, e.Type, e.Data)
+}
 
 type SnapshotMetadata struct {
 	Index uint64

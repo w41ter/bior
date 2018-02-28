@@ -15,8 +15,7 @@ func (app *application) ApplyEntry(entry *raftpd.Entry) {
 
 	var err error
 
-	bytes := [8]byte{}
-	value := int(binary.LittleEndian.Uint64(bytes[:]))
+	value := int(binary.LittleEndian.Uint64(entry.Data))
 	index := int(entry.Index)
 
 	err = app.callback.CheckApply(app.ID(), index, value)

@@ -74,25 +74,17 @@ func (app *application) handleMessage(from int, data []byte) {
 		return
 	}
 
-	var pkt Packet
-	pd.MustUnmarshal(&pkt, data)
-	switch pkt.PkgType {
-	case typeHeartbeat:
-		/* ignore */
-	case typeNormal:
-		log.Debugf("app id: %d received: %v", app.id, pkt.Msg)
-		msg := pkt.Msg.(raftpd.Message)
-		rf.Step(&msg)
-	}
+	var msg raftpd.Message
+	pd.MustUnmarshal(&msg, data)
+
+	log.Debugf("app id: %d received: %v", app.id, msg)
+
+	rf.Step(&msg)
 }
 
 func (app *application) Send(to uint64, msg pd.Messager) error {
 	log.Debugf("app id: %d send: %v", app.id, msg)
-	pkt := Packet{
-		PkgType: typeNormal,
-		Msg:     msg,
-	}
-	bytes := pd.MustMarshal(&pkt)
+	bytes := pd.MustMarshal(msg)
 	return app.handler.Call(int(to), bytes)
 }
 
@@ -196,19 +188,4 @@ func (app *application) ApplyError() error {
 
 func (app *application) ID() int {
 	return app.handler.ID()
-}
-
-func (app *application) SendHeartbeat(end int) {
-	pkt := Packet{
-		PkgType: typeHeartbeat,
-	}
-	bytes := pd.MustMarshal(&pkt)
-	app.handler.Call(end, bytes)
-}
-
-func (app *application) Disconnect(end int) {
-	rf := app.getRaft()
-	if rf != nil {
-		rf.Unreachable(uint64(end))
-	}
 }

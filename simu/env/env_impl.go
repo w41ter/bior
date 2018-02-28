@@ -12,8 +12,6 @@ import (
 	"github.com/thinkermao/network-simu-go"
 )
 
-const readTimeout = 300
-const writeTimeout = 150
 const walDir = "./wal_log/"
 
 // func randString(n int) string {
@@ -33,7 +31,7 @@ type Environment struct {
 
 // MakeEnvironment return instance of Environment.
 func MakeEnvironment(t *testing.T, num int, unrealiable bool) *Environment {
-	builder := network.CreateBuilder() //(readTimeout, writeTimeout)
+	builder := network.CreateBuilder()
 	env := &Environment{}
 	// create a full set of Rafts.
 	var apps []raft.Application
@@ -43,21 +41,7 @@ func MakeEnvironment(t *testing.T, num int, unrealiable bool) *Environment {
 			panic(err)
 		}
 
-		//readCb := func(i int) func(int) {
-		//	return func(end int) {
-		//		fmt.Println(env.apps[i].ID(), " unreachable ", end)
-		//		env.apps[i].Disconnect(end)
-		//	}
-		//}(i)
-		//
-		//writeCb := func(i int) func(int) {
-		//	return func(end int) {
-		//		fmt.Println(env.apps[i].ID(), " send heartbeat to ", end)
-		//		env.apps[i].SendHeartbeat(end)
-		//	}
-		//}(i)
-
-		handler := builder.AddEndpoint() //readCb, writeCb)
+		handler := builder.AddEndpoint()
 		apps = append(apps, raft.MakeApp(dir, handler, env))
 	}
 
@@ -215,18 +199,15 @@ func (env *Environment) CheckNoLeader() {
 }
 
 // CommittedNumber how many servers think a log entry is committed?
-func (env *Environment) CommittedNumber(index int) (int, interface{}) {
+func (env *Environment) CommittedNumber(index int) (int, int) {
 	count := 0
 	cmd := -1
 	for i := 0; i < len(env.apps); i++ {
-		// race data
-		err := env.apps[i].ApplyError()
-		if err != nil {
+		if err := env.apps[i].ApplyError(); err != nil {
 			env.t.Fatal(err)
 		}
 
-		value, ok := env.apps[i].LogAt(index)
-		if ok {
+		if value, ok := env.apps[i].LogAt(index); ok {
 			if count > 0 && cmd != value {
 				env.t.Fatalf("committed values do not match: index %v, %v, %v\n",
 					index, cmd, value)
@@ -235,6 +216,7 @@ func (env *Environment) CommittedNumber(index int) (int, interface{}) {
 			cmd = value
 		}
 	}
+	// fmt.Println(index, "committed number", count, "value", cmd)
 	return count, cmd
 }
 
@@ -285,8 +267,7 @@ func (env *Environment) One(cmd int, expectedServers int) int {
 		index := -1
 		for si := 0; si < env.totalNodes; si++ {
 			starts = (starts + 1) % env.totalNodes
-			index1, _, ok := env.apps[starts].Propose(cmd)
-			if ok {
+			if index1, _, ok := env.apps[starts].Propose(cmd); ok {
 				index = int(index1)
 				break
 			}
@@ -297,10 +278,9 @@ func (env *Environment) One(cmd int, expectedServers int) int {
 			// submitted our command; Wait a while for agreement.
 			t1 := time.Now()
 			for time.Since(t1).Seconds() < 2 {
-				nd, cmd1 := env.CommittedNumber(index)
-				if nd > 0 && nd >= expectedServers {
+				if nd, cmd1 := env.CommittedNumber(index); nd > 0 && nd >= expectedServers {
 					// committed
-					if cmd2, ok := cmd1.(int); ok && cmd2 == cmd {
+					if cmd1 == cmd {
 						// and it was the command we submitted.
 						return index
 					}

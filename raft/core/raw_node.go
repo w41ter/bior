@@ -72,9 +72,9 @@ func MakeRawNode(config *conf.Config, app NodeApplication) *RawNode {
 
 func (node *RawNode) Unreachable(peer uint64) {
 	msg := raftpd.Message{
-		From: peer,
-		To: conf.InvalidID,
-		Term: node.term,
+		From:    peer,
+		To:      conf.InvalidID,
+		Term:    node.term,
 		MsgType: raftpd.MsgUnreachable,
 	}
 	node.Step(&msg)
@@ -122,8 +122,8 @@ func (node *RawNode) send(msg *raftpd.Message) {
 	node.messages = append(node.messages, *msg)
 }
 
-func (node *RawNode) saveReadState(readStae *read.ReadState) {
-	node.readStates = append(node.readStates, *readStae)
+func (node *RawNode) saveReadState(readState *read.ReadState) {
+	node.readStates = append(node.readStates, *readState)
 }
 
 func (node *RawNode) applyEntry(entry *raftpd.Entry) {

@@ -47,6 +47,7 @@ func TestRaft_PreVoteReject(t *testing.T) {
 	if leader1 != leader2 || term1 != term2 {
 		fmt.Printf("there's quorum, no election should be propose")
 	}
+	fmt.Printf("  ... Passed\n")
 }
 
 func TestRaft_ReElection(t *testing.T) {
