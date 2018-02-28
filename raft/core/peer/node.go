@@ -168,8 +168,6 @@ func (n *Node) SendSnapshot(idx uint64) {
 // UpdateVoteState set vote by reject, if true vote
 // set to voteReject, otherwise set to voteGranted.
 func (n *Node) UpdateVoteState(reject bool) {
-	utils.Assert(n.Vote == VoteNone, "change vote state twice")
-
 	if reject {
 		n.Vote = VoteReject
 	} else {

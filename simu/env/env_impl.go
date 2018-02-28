@@ -14,13 +14,6 @@ import (
 
 const walDir = "./wal_log/"
 
-// func randString(n int) string {
-// 	b := make([]byte, 2*n)
-// 	crand.Read(b)
-// 	s := base64.URLEncoding.EncodeToString(b)
-// 	return s[0:n]
-// }
-
 // Environment support Environment for test.
 type Environment struct {
 	t          *testing.T
