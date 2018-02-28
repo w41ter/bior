@@ -107,3 +107,44 @@ func TestRaft_FailNoAgree(t *testing.T) {
 
 	fmt.Printf("  ... Passed\n")
 }
+
+func TestRaft_Rejoin(t *testing.T) {
+	servers := 3
+	env := envior.MakeEnvironment(t, servers, false)
+	defer env.Cleanup()
+
+	fmt.Printf("Test: rejoin of partitioned leader ...\n")
+
+	env.One(101, servers)
+
+	// leader network failure
+	leader1 := env.CheckOneLeader()
+	env.Disconnect(leader1)
+
+	// make old leader try to agree on some entries
+	env.Propose(leader1, 102)
+	env.Propose(leader1, 103)
+	env.Propose(leader1, 104)
+
+	// new leader commits
+	env.One(103, servers-1)
+
+	// new leader network failure
+	leader2 := env.CheckOneLeader()
+	env.Disconnect(leader2)
+
+	// old leader connected again
+	env.Connect(leader1)
+
+	// wait for new elected leader
+	env.CheckOneLeader()
+
+	env.One(104, servers-1)
+
+	// all together now
+	env.Connect(leader2)
+
+	env.One(105, servers)
+
+	fmt.Printf("  ... Passed\n")
+}
