@@ -41,7 +41,15 @@ func TestRaft_PreVoteReject(t *testing.T) {
 
 	// if the one disconnects, no election should be propose.
 	env.Disconnect((leader1 + 1) % servers)
-	sleep(3 * raft.ElectionTimeout)
+
+	// wait node become preVote state.
+	sleep(2 * raft.ElectionTimeout)
+
+	// node rejoin, pre vote request should be rejected.
+	env.Connect((leader1 + 1) % servers)
+
+	sleep(2 * raft.ElectionTimeout)
+
 	leader2 := env.CheckOneLeader()
 	term2 := env.CheckTerms()
 	if leader1 != leader2 || term1 != term2 {
@@ -89,4 +97,8 @@ func TestRaft_ReElection(t *testing.T) {
 	env.CheckOneLeader()
 
 	fmt.Printf("  ... Passed\n")
+}
+
+func TestRaft_LeaderStickness(t *testing.T) {
+	// TODO:
 }
