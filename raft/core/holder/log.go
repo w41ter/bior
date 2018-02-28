@@ -11,7 +11,7 @@ import (
 )
 
 // LogHolder provides structure to holder log entries,
-// and given some useful informations for raft.
+// and given some useful information for raft.
 // Here is the memory layout of LogHolder:
 //
 // [offset, lastApplied, commitIndex, stabled, lastIndex)
@@ -242,7 +242,7 @@ func (holder *LogHolder) TryAppend(prevIdx, prevTerm uint64,
 				holder.id, conflictIdx, holder.commitIndex)
 		} else {
 			offset := prevIdx + 1
-			holder.Append(entries[conflictIdx-offset:])
+			holder.truncateAndAppend(entries[conflictIdx-offset:])
 		}
 
 		return holder.LastIndex(), true
@@ -266,6 +266,6 @@ func (holder *LogHolder) Append(entries []raftpd.Entry) uint64 {
 		"%d after %d is out of range [committed: %d]",
 		holder.id, prevIndex, holder.commitIndex)
 
-	holder.truncateAndAppend(entries)
+	holder.entries = append(holder.entries, entries...)
 	return holder.LastIndex()
 }

@@ -108,7 +108,7 @@ func TestRaft_FailNoAgree(t *testing.T) {
 	fmt.Printf("  ... Passed\n")
 }
 
-func TestRaft_Rejoin(t *testing.T) {
+func TestRaft_RejoinAgree(t *testing.T) {
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()

@@ -69,23 +69,28 @@ func TestLogHolder_findConflict(t *testing.T) {
 
 func TestLogHolder_truncateAndAppend(t *testing.T) {
 	tests := []struct {
-		origin  []raftpd.Entry
-		entries []raftpd.Entry
-		wents   []raftpd.Entry
+		origin      []raftpd.Entry
+		entries     []raftpd.Entry
+		wents       []raftpd.Entry
+		lastStabled uint64
 	}{
 		// empty
-		{makeEntries(1, 2, 3), makeEntries(), makeEntries(1, 2, 3)},
+		{makeEntries(1, 2, 3), makeEntries(), makeEntries(1, 2, 3), 3},
 		// append
-		{makeEntries(1, 2), makeEntries(3, 4), makeEntries(1, 2, 3, 4)},
+		{makeEntries(1, 2), makeEntries(3, 4), makeEntries(1, 2, 3, 4), 2},
 		// replace
-		{makeEntries(3, 4, 5), makeEntries(1, 2), makeEntries(1, 2)},
+		// {makeEntries(3, 4, 5), makeEntries(1, 2), makeEntries(1, 2)},
 		// truncate and append
-		{makeEntries(1, 2, 3, 4, 5), makeEntries(3, 4, 5, 6), makeEntries(1, 2, 3, 4, 5, 6)},
+		{makeEntries(1, 2, 3, 4, 5), makeEntries(3, 4, 5, 6), makeEntries(1, 2, 3, 4, 5, 6), 2},
 	}
 	for i, test := range tests {
 		holder := RebuildLogHolder(1, test.origin)
 		holder.truncateAndAppend(test.entries)
 		compareEntries(t, i, holder.entries, test.wents)
+		if holder.lastStabled != test.lastStabled {
+			t.Fatalf("#%d: last stabled want: %d, but get: %d",
+				i, test.lastStabled, holder.lastStabled)
+		}
 	}
 }
 

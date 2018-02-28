@@ -99,14 +99,10 @@ func TestLogHolder_Append(t *testing.T) {
 		widx    uint64
 		wents   []raftpd.Entry
 	}{
+		// empty
 		{[]raftpd.Entry{}, 3, []raftpd.Entry{makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 3)}},
-		{[]raftpd.Entry{makeEntry(3, 2)}, 3, []raftpd.Entry{makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 2)}},
-		// conflicts with index 2
-		{[]raftpd.Entry{makeEntry(2, 3)}, 2, []raftpd.Entry{makeEntry(1, 1), makeEntry(2, 3)}},
-		// conflicts with index 3
-		{[]raftpd.Entry{makeEntry(3, 4)}, 3, []raftpd.Entry{
-			makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 4),
-		}},
+		// non-empty
+		{[]raftpd.Entry{makeEntry(4, 4)}, 4, []raftpd.Entry{makeEntry(1, 1), makeEntry(2, 2), makeEntry(3, 3), makeEntry(4, 4)}},
 	}
 
 	for i := 0; i < len(tests); i++ {

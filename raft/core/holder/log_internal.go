@@ -27,12 +27,18 @@ func (holder *LogHolder) truncateAndAppend(entries []raftpd.Entry) {
 	if after == lastIndex+1 {
 		// after is the next index in the self.Entries, append directly
 	} else if after <= holder.offset() {
-		// The log is being truncated to before our current offset
-		// portion, so set the offset and replace the Entries
-		holder.entries = make([]raftpd.Entry, 0)
+		// holder.offset() always >= commitIndex.
+		log.Fatal("truncate out of range")
 	} else {
 		holder.checkOutOfBounds(holder.FirstIndex(), after)
 		holder.entries = holder.entries[:after-holder.offset()]
+
+		utils.Assert(len(holder.entries) >= 1, "must ensure position of dummy entry")
+
+		// after truncate, fix last stabled to corrected index.
+		if holder.lastStabled >= after {
+			holder.lastStabled = after - 1
+		}
 	}
 	holder.entries = append(holder.entries, entries...)
 
