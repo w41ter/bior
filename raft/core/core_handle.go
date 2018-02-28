@@ -107,7 +107,7 @@ func (c *core) handleReadIndexRequest(msg *raftpd.Message) {
 func (c *core) handleAppendEntries(msg *raftpd.Message) {
 	reply := raftpd.Message{
 		MsgType: raftpd.MsgAppendResponse,
-		To:    msg.From,
+		To:      msg.From,
 	}
 	if c.log.CommitIndex() > msg.LogIndex {
 		log.Infof("%d [Term: %d, commit: %d] reject expired append Entries "+
@@ -266,10 +266,12 @@ func (c *core) handlePreVote(msg *raftpd.Message) {
 	// Reply false if candidate's log isn't at least as up­to­date as receiver's log.
 	if (c.leaderID != conf.InvalidID && c.timeElapsed < c.electionTick) ||
 		(msg.Term < c.term) ||
-		c.log.IsUpToDate(msg.LogIndex, msg.LogTerm) {
-		reply.Reject = false
-	} else {
+		!c.log.IsUpToDate(msg.LogIndex, msg.LogTerm) {
+		/* rejected */
 		reply.Reject = true
+	} else {
+		/* accept */
+		reply.Reject = false
 	}
 
 	c.send(&reply)

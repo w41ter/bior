@@ -47,7 +47,6 @@ func (c *core) reset(term uint64) {
 		c.vote = conf.InvalidID
 	}
 	c.leaderID = conf.InvalidID
-	c.timeElapsed = 0
 	c.resetLease()
 }
 
@@ -113,8 +112,8 @@ func (c *core) preCampaign() {
 
 	msg := raftpd.Message{
 		LogIndex: c.log.LastIndex(),
-		LogTerm: c.log.LastTerm(),
-		MsgType: raftpd.MsgPreVoteRequest,
+		LogTerm:  c.log.LastTerm(),
+		MsgType:  raftpd.MsgPreVoteRequest,
 	}
 	c.sendToNodes(&msg)
 }
@@ -127,8 +126,8 @@ func (c *core) campaign() {
 
 	msg := raftpd.Message{
 		LogIndex: c.log.LastIndex(),
-		LogTerm: c.log.LastTerm(),
-		MsgType: raftpd.MsgVoteRequest,
+		LogTerm:  c.log.LastTerm(),
+		MsgType:  raftpd.MsgVoteRequest,
 	}
 	c.sendToNodes(&msg)
 }
