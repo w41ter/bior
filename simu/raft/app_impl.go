@@ -14,6 +14,7 @@ import (
 const ElectionTimeout = 1000
 const HeartbeatTimeout = 100
 const tickSize = 25
+const MaxSizePerMsg = 64 * 1024 * 1024 // 64MB
 
 // AppCallback Used by config to check applied entries.
 type AppCallback interface {
@@ -101,11 +102,11 @@ func (app *application) Start(nodes []uint64) error {
 		snapshot := app.ReadSnapshot()
 		rf, err = raft.RebuildRaft(app.id, snapshot.Metadata.Index,
 			nodes, ElectionTimeout, HeartbeatTimeout,
-			tickSize, app.walDir, app, app)
+			tickSize, MaxSizePerMsg, app.walDir, app, app)
 	} else {
 		rf, err = raft.MakeRaft(app.id, nodes,
 			ElectionTimeout, HeartbeatTimeout,
-			tickSize, app.walDir, app, app)
+			tickSize, MaxSizePerMsg, app.walDir, app, app)
 		app.persist = new(Persister)
 	}
 

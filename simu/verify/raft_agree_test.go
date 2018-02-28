@@ -2,7 +2,9 @@ package verify
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/thinkermao/bior/raft/core/conf"
 	"github.com/thinkermao/bior/simu/env"
@@ -145,6 +147,78 @@ func TestRaft_RejoinAgree(t *testing.T) {
 	env.Connect(leader2)
 
 	env.One(105, servers)
+
+	fmt.Printf("  ... Passed\n")
+}
+
+func TestRaft_BackupAgree(t *testing.T) {
+	servers := 5
+	env := envior.MakeEnvironment(t, servers, false)
+	defer env.Cleanup()
+
+	fmt.Printf("Test: leader backs up quickly over incorrect follower logs ...\n")
+
+	env.One(rand.Int(), servers)
+
+	// put leader and one follower in a partition
+	leader1 := env.CheckOneLeader()
+	env.Disconnect((leader1 + 2) % servers)
+	env.Disconnect((leader1 + 3) % servers)
+	env.Disconnect((leader1 + 4) % servers)
+
+	// submit lots of commands that won't commit
+	for i := 0; i < 50; i++ {
+		env.Propose(leader1, rand.Int())
+	}
+
+	time.Sleep(raft.ElectionTimeout / 2)
+
+	env.Disconnect((leader1 + 0) % servers)
+	env.Disconnect((leader1 + 1) % servers)
+
+	// allow other partition to recover
+	env.Connect((leader1 + 2) % servers)
+	env.Connect((leader1 + 3) % servers)
+	env.Connect((leader1 + 4) % servers)
+
+	// lots of successful commands to new group.
+	for i := 0; i < 50; i++ {
+		env.One(rand.Int(), 3)
+	}
+
+	// now another partitioned leader and one follower
+	leader2 := env.CheckOneLeader()
+	other := (leader1 + 2) % servers
+	if leader2 == other {
+		other = (leader2 + 1) % servers
+	}
+	env.Disconnect(other)
+
+	// lots more commands that won't commit
+	for i := 0; i < 50; i++ {
+		env.Propose(leader2, rand.Int())
+	}
+
+	time.Sleep(raft.ElectionTimeout / 2)
+
+	// bring original leader back to life,
+	for i := 0; i < servers; i++ {
+		env.Disconnect(i)
+	}
+	env.Connect((leader1 + 0) % servers)
+	env.Connect((leader1 + 1) % servers)
+	env.Connect(other)
+
+	// lots of successful commands to new group.
+	for i := 0; i < 50; i++ {
+		env.One(rand.Int(), 3)
+	}
+
+	// now everyone
+	for i := 0; i < servers; i++ {
+		env.Connect(i)
+	}
+	env.One(rand.Int(), servers)
 
 	fmt.Printf("  ... Passed\n")
 }

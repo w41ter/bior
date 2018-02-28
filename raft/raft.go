@@ -39,6 +39,7 @@ func MakeRaft(
 	id uint64,
 	nodes []uint64,
 	electionTimeout, heartbeatTimeout, tickSize int,
+	maxSizePerMsg uint,
 	walDir string,
 	application Application,
 	transport Transporter) (*Raft, error) {
@@ -54,6 +55,7 @@ func MakeRaft(
 		HeartbeatTick: heartbeatTimeout,
 		Nodes:         nodes,
 		Entries:       nil,
+		MaxSizePreMsg: maxSizePerMsg,
 	}
 
 	raft.raft = core.MakeRaft(&config, raft)
@@ -75,6 +77,7 @@ func RebuildRaft(
 	logSequenceNumber uint64,
 	nodes []uint64,
 	electionTimeout, heartbeatTimeout, tickSize int,
+	maxSizePerMsg uint,
 	walDir string,
 	application Application,
 	transport Transporter) (*Raft, error) {
@@ -95,6 +98,7 @@ func RebuildRaft(
 		HeartbeatTick: heartbeatTimeout,
 		Nodes:         nodes,
 		Entries:       entries,
+		MaxSizePreMsg: maxSizePerMsg,
 	}
 	raft.raft = core.MakeRaft(&config, raft)
 	raft.wal = ls
