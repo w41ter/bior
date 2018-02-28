@@ -64,3 +64,46 @@ func TestRaft_FailAgree(t *testing.T) {
 
 	fmt.Printf("  ... Passed\n")
 }
+
+func TestRaft_FailNoAgree(t *testing.T) {
+	servers := 5
+	env := envior.MakeEnvironment(t, servers, false)
+	defer env.Cleanup()
+
+	fmt.Printf("Test: no agreement if too many followers disconnect ...\n")
+
+	env.One(10, servers)
+
+	// 3 of 5 followers disconnect
+	leader := env.CheckOneLeader()
+	env.Disconnect((leader + 1) % servers)
+	env.Disconnect((leader + 2) % servers)
+	env.Disconnect((leader + 3) % servers)
+
+	var index1 int
+	if index, _, ok := env.Propose(leader, 20); !ok {
+		t.Fatalf("leader rejected propose 20.")
+	} else {
+		sleep(2 * raft.ElectionTimeout)
+		if n, _ := env.CommittedNumber(int(index)); n > 0 {
+			t.Fatalf("%v committed but no quorum", n)
+		}
+		index1 = int(index)
+	}
+
+	// repair
+	env.Connect((leader + 1) % servers)
+	env.Connect((leader + 2) % servers)
+	env.Connect((leader + 3) % servers)
+
+	leader2 := env.CheckOneLeader()
+	if index, _, ok := env.Propose(leader2, 30); !ok {
+		t.Fatalf("leader2 rejected propose 30")
+	} else if index1 >= int(index) {
+		t.Fatalf("unexpected index %v", index)
+	}
+
+	env.One(1000, servers)
+
+	fmt.Printf("  ... Passed\n")
+}

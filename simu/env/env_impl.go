@@ -56,6 +56,8 @@ func MakeEnvironment(t *testing.T, num int, unrealiable bool) *Environment {
 		env.Connect(i)
 	}
 
+	env.net.SetReliable(!unrealiable)
+
 	return env
 }
 
