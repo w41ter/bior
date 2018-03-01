@@ -53,11 +53,6 @@ func (app *application) ApplySnapshot(snapshot *raftpd.Snapshot) {
 
 	persist.SaveSnapshot(snapshot)
 	app.restoreFromSnapshot(snapshot)
-
-	rf := app.getRaft()
-	if rf != nil {
-		rf.Compact(snapshot)
-	}
 }
 
 // ReadSnapshot if snapshot is building at now, it will return nil,

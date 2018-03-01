@@ -120,6 +120,9 @@ func RebuildRaft(
 
 // GetState return the state of raft.
 func (raft *Raft) GetState() (uint64, bool) {
+	raft.mutex.Lock()
+	defer raft.mutex.Unlock()
+
 	return raft.raft.ReadStatus()
 }
 

@@ -181,10 +181,12 @@ func (c *core) handleSnapshot(msg *raftpd.Message) {
 			c.id, c.log.CommitIndex(),
 			msg.Snapshot.Metadata.Index, msg.Snapshot.Metadata.Term)
 
+		// FIXME: maybe blocked or compact before it return.
+		c.callback.applySnapshot(msg.Snapshot)
+		c.ApplySnapshot(&msg.Snapshot.Metadata)
+
 		reply.Index = msg.Snapshot.Metadata.Index
 		reply.RejectHint = c.log.LastIndex()
-		// applySnapshot should call ApplySnapshot to compact
-		c.callback.applySnapshot(msg.Snapshot)
 	} else {
 		log.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
 			c.id, c.log.CommitIndex(),
