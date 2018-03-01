@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thinkermao/bior/raft/core/peer"
 	"github.com/thinkermao/bior/simu/env"
 	"github.com/thinkermao/bior/simu/raft"
 )
@@ -14,6 +15,7 @@ import (
 // TODO: why ?
 
 func TestRaft_ConcurrentPropose(t *testing.T) {
+	peer.Simulation = true
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
@@ -115,6 +117,7 @@ loop:
 }
 
 func TestRaft_NetworkCount(t *testing.T) {
+	peer.Simulation = true
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()

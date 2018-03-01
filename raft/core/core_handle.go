@@ -25,9 +25,10 @@ func (c *core) stepLeader(msg *raftpd.Message) {
 }
 
 func (c *core) stepFollower(msg *raftpd.Message) {
+	c.becomeFollower(c.term, msg.From)
 	switch msg.MsgType {
 	case raftpd.MsgReadIndexResponse:
-		c.resetLease()
+		// c.resetLease()
 		readState := read.ReadState{
 			Index:      msg.Index,
 			RequestCtx: msg.Context,
@@ -35,13 +36,13 @@ func (c *core) stepFollower(msg *raftpd.Message) {
 
 		c.callback.saveReadState(&readState)
 	case raftpd.MsgAppendRequest:
-		c.resetLease()
+		// c.resetLease()
 		c.handleAppendEntries(msg)
 	case raftpd.MsgHeartbeatRequest:
-		c.resetLease()
+		// c.resetLease()
 		c.handleHeartbeat(msg)
 	case raftpd.MsgSnapshotRequest:
-		c.resetLease()
+		// c.resetLease()
 		c.handleSnapshot(msg)
 	}
 }

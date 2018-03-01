@@ -25,6 +25,8 @@ func (app *application) ApplyEntry(entry *raftpd.Entry) {
 	if err == nil {
 		if lastValue, ok := app.logs[index]; !ok {
 			app.logs[index] = value
+			app.logIndex = entry.Index
+			app.logTerm = entry.Term
 		} else {
 			err = fmt.Errorf("%d apply same index: %d twice : %d, last: %d",
 				app.id, index, value, lastValue)
@@ -50,6 +52,7 @@ func (app *application) ApplySnapshot(snapshot *raftpd.Snapshot) {
 	}
 
 	persist.SaveSnapshot(snapshot)
+	app.restoreFromSnapshot(snapshot)
 }
 
 func (app *application) ReadSnapshot() *raftpd.Snapshot {

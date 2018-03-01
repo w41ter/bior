@@ -61,7 +61,7 @@ func (env *Environment) CheckApply(id, index, value int) error {
 		if v, ok := app.LogAt(index); ok && v != value {
 			// some server has already committed a different value for this entry!
 			return fmt.Errorf("commit index=%v server=%v %v != server=%v %v",
-				index, app.ID(), value, j, v)
+				index, id, value, app.ID(), v)
 		}
 	}
 	return nil
@@ -84,7 +84,9 @@ func (env *Environment) Start1(i int) {
 		ns = append(ns, uint64(env.apps[i].ID()))
 	}
 
-	env.apps[i].Start(ns)
+	if err := env.apps[i].Start(ns); err != nil {
+		env.t.Fatal("start node", i, "error:", err)
+	}
 }
 
 // Propose send propose to raft.

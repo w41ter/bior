@@ -84,10 +84,7 @@ func (node *RawNode) Ready() Ready {
 	ready := Ready{}
 
 	ss := node.core.ReadSoftState()
-	if ss != node.prevSS {
-		ready.SS = &ss
-		node.prevSS = ss
-	}
+	ready.SS = &ss
 
 	hs := node.core.ReadHardState()
 	if hs != node.prevHS {

@@ -103,8 +103,9 @@ func makeCore(config *conf.Config, callback application) *core {
 
 func (c *core) ReadSoftState() SoftState {
 	return SoftState{
-		LeaderID: c.leaderID,
-		State:    c.state,
+		LeaderID:  c.leaderID,
+		State:     c.state,
+		LastIndex: c.log.LastIndex(),
 	}
 }
 

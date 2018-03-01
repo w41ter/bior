@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/thinkermao/bior/raft/core/conf"
+	"github.com/thinkermao/bior/raft/core/peer"
 	"github.com/thinkermao/bior/simu/env"
 	"github.com/thinkermao/bior/simu/raft"
 )
 
 func TestRaft_BasicAgree(t *testing.T) {
+	peer.Simulation = true
 	servers := 5
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
@@ -38,6 +40,7 @@ func TestRaft_BasicAgree(t *testing.T) {
 }
 
 func TestRaft_FailAgree(t *testing.T) {
+	peer.Simulation = true
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
@@ -69,6 +72,7 @@ func TestRaft_FailAgree(t *testing.T) {
 }
 
 func TestRaft_FailNoAgree(t *testing.T) {
+	peer.Simulation = true
 	servers := 5
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
@@ -112,6 +116,7 @@ func TestRaft_FailNoAgree(t *testing.T) {
 }
 
 func TestRaft_RejoinAgree(t *testing.T) {
+	peer.Simulation = true
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
@@ -153,6 +158,7 @@ func TestRaft_RejoinAgree(t *testing.T) {
 }
 
 func TestRaft_BackupAgree(t *testing.T) {
+	peer.Simulation = true
 	servers := 5
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
@@ -226,6 +232,7 @@ func TestRaft_BackupAgree(t *testing.T) {
 
 // Delay 300ms
 func TestRaft_LongDelayAgree(t *testing.T) {
+	peer.Simulation = true
 	servers := 5
 	env := envior.MakeEnvironment(t, servers, false)
 	env.SetLongDelay(true)

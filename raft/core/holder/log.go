@@ -67,13 +67,15 @@ func MakeLogHolder(id uint64, firstIndex uint64, firstTerm uint64) *LogHolder {
 func RebuildLogHolder(id uint64, entries []raftpd.Entry) *LogHolder {
 	utils.Assert(len(entries) != 0, "required entries not empty")
 
-	log.Debugf("rebuild log holder id: %d [idx: %d, term: %d]",
-		id, entries[0].Index, entries[0].Term)
-
 	firstIndex := entries[0].Index
+	firstTerm := entries[0].Term
 	lastStabled := entries[len(entries)-1].Index
+	lastTerm := entries[len(entries)-1].Term
 
-	// copy make unique contraint.
+	log.Debugf("rebuild log holder id: %d [idx: %d-%d, term: %d-%d]",
+		id, firstIndex, lastStabled, firstTerm, lastTerm)
+
+	// copy make unique constraint.
 	dup := make([]raftpd.Entry, len(entries))
 	copy(dup, entries)
 
@@ -248,7 +250,7 @@ func (holder *LogHolder) TryAppend(prevIdx, prevTerm uint64,
 		return holder.LastIndex(), true
 	}
 
-	utils.Assert(prevIdx > holder.commitIndex,
+	utils.Assert(prevIdx >= holder.commitIndex,
 		"%d entry %d [Term: %d] conflict with committed entry Term: %d",
 		holder.id, prevIdx, prevTerm, holder.Term(prevIdx))
 

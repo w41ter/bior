@@ -7,6 +7,8 @@ import (
 	"github.com/thinkermao/bior/utils"
 )
 
+var Simulation = false
+
 // Node maintains the same information as other nodes in the raft group.
 type Node struct {
 	belongID uint64
@@ -208,8 +210,8 @@ func (n *Node) SendEntries(entries []raftpd.Entry) {
 func (n *Node) IsPaused() bool {
 	switch n.state {
 	case nodeStateProbe:
-		// FIXME: it will blocking node if remote lose response.
-		return n.paused
+		// FIXME: it will blocking node if remote lose response. best way is used timeout.
+		return !Simulation && n.paused
 	case nodeStateReplicate:
 		return n.ins.full()
 	case nodeStateSnapshot:

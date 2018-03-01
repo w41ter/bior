@@ -6,6 +6,7 @@ import (
 	"github.com/thinkermao/bior/raft/proto"
 )
 
+// TODO: test state to follower need reset leaderId.
 // accept:
 // 	- Than electionTick did not receive the leader message
 //	- CurrentTerm less than remote Term
@@ -20,8 +21,8 @@ func TestCore_handlePreVote(t *testing.T) {
 		entries     []raftpd.Entry
 		want        bool
 	}{
-	// accept
-	// {11, 1, 2, }
+		// accept
+		// {11, 1, 2, }
 	}
 
 	for i, test := range cases {

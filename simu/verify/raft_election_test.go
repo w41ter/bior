@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/thinkermao/bior/raft/core/peer"
 	"github.com/thinkermao/bior/simu/env"
 	"github.com/thinkermao/bior/simu/raft"
 )
 
 func TestRaft_InitialElection(t *testing.T) {
+	peer.Simulation = true
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
@@ -30,6 +32,7 @@ func TestRaft_InitialElection(t *testing.T) {
 }
 
 func TestRaft_PreVoteReject(t *testing.T) {
+	peer.Simulation = true
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
@@ -59,6 +62,7 @@ func TestRaft_PreVoteReject(t *testing.T) {
 }
 
 func TestRaft_ReElection(t *testing.T) {
+	peer.Simulation = true
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()
@@ -102,6 +106,7 @@ func TestRaft_ReElection(t *testing.T) {
 // Followers should reject new leaders, if from their point of
 // view the existing leader is still functioning correctly
 func TestRaft_LeaderStickness(t *testing.T) {
+	peer.Simulation = true
 	servers := 3
 	env := envior.MakeEnvironment(t, servers, false)
 	defer env.Cleanup()

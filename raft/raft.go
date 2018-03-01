@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/thinkermao/bior/raft/core"
 	"github.com/thinkermao/bior/raft/core/conf"
 	"github.com/thinkermao/bior/raft/proto"
@@ -60,7 +61,16 @@ func MakeRaft(
 
 	raft.raft = core.MakeRaft(&config, raft)
 
-	w, err := CreateLogStorage(walDir, conf.InvalidIndex+1)
+	// apply a dummy snapshot for restore wal from disk.
+	// FIXME: should call first after raft build.
+	go raft.callback.ApplySnapshot(&raftpd.Snapshot{
+		Metadata: raftpd.SnapshotMetadata{
+			Index: conf.InvalidIndex,
+			Term:  conf.InvalidTerm,
+		},
+	})
+
+	w, err := CreateLogStorage(walDir, conf.InvalidIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -153,12 +163,23 @@ func (raft *Raft) ready() (rd core.Ready) {
 func (raft *Raft) handleRaftReady() {
 	ready := raft.ready()
 	// FIXME: 在save之前可以先处理 readStateNotice
-	raft.wal.save(ready.HS, ready.Entries)
-	raft.wal.sync()
+	if err := raft.wal.save(ready.SS.LastIndex, ready.HS, ready.Entries); err != nil {
+		panic(err)
+	}
+	if err := raft.wal.sync(); err != nil {
+		panic(err)
+	}
 
 	for i := 0; i < len(ready.CommitEntries); i++ {
 		// FIXME: 是否有必要将更改配置信息应用
 		raft.callback.ApplyEntry(&ready.CommitEntries[i])
+	}
+
+	if len(ready.CommitEntries) > 0 {
+		last := len(ready.CommitEntries) - 1
+		log.Debugf("%d apply entries from %d [term: %d] to %d [term: %d]",
+			raft.id, ready.CommitEntries[0].Index, ready.CommitEntries[last].Term,
+			ready.CommitEntries[last].Index, ready.CommitEntries[last].Term)
 	}
 
 	raft.mutex.Lock()

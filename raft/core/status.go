@@ -6,6 +6,8 @@ type SoftState struct {
 	LeaderID uint64
 	// State return current node's state role.
 	State StateRole
+	// LastIndex return current node's index of last entry.
+	LastIndex uint64
 }
 
 // StateRole said the state role of raft.
