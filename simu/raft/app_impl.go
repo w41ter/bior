@@ -218,7 +218,7 @@ func (app *application) restoreFromSnapshot(snapshot *raftpd.Snapshot) {
 		var logs map[int]int
 		buf := bytes.NewBuffer(snapshot.Data)
 		dec := gob.NewDecoder(buf)
-		if err := dec.Decode(logs); err != nil {
+		if err := dec.Decode(&logs); err != nil {
 			panic("decode logs failed")
 		}
 		app.logs = logs
@@ -228,7 +228,7 @@ func (app *application) restoreFromSnapshot(snapshot *raftpd.Snapshot) {
 }
 
 // save to snapshot encode logs to bytes, and save it to snapshot.
-func (app *application) saveToSnapshot() {
+func (app *application) saveToSnapshot() *raftpd.Snapshot {
 	persist := app.getPersist()
 
 	if persist == nil {
@@ -244,12 +244,23 @@ func (app *application) saveToSnapshot() {
 		panic("encode logs failed")
 	}
 
-	snapshot := raftpd.Snapshot{
+	snapshot := &raftpd.Snapshot{
 		Metadata: raftpd.SnapshotMetadata{
 			Index: app.logIndex,
 			Term:  app.logTerm,
 		},
 		Data: data.Bytes(),
 	}
-	persist.SaveSnapshot(&snapshot)
+	persist.SaveSnapshot(snapshot)
+
+	return snapshot
+}
+
+func (app *application) GenSnapshot() (uint64, uint64) {
+	snapshot := app.saveToSnapshot()
+	rf := app.getRaft()
+	if rf != nil {
+		rf.Compact(snapshot)
+	}
+	return snapshot.Metadata.Index, snapshot.Metadata.Term
 }

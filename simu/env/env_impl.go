@@ -296,3 +296,7 @@ func (env *Environment) One(cmd int, expectedServers int) int {
 	env.t.Fatalf("One(%v) failed to reach agreement", cmd)
 	return -1
 }
+
+func (env *Environment) GenSnapshot(id int) (uint64, uint64) {
+	return env.apps[id].GenSnapshot()
+}

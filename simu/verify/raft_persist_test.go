@@ -72,7 +72,6 @@ func TestRaft_MoreNodesCrashPersist(t *testing.T) {
 
 		leader1 := env.CheckOneLeader()
 
-		fmt.Println("leader", leader1, "stop", (leader1+1)%servers, (leader1+2)%servers)
 		env.Disconnect((leader1 + 1) % servers)
 		env.Disconnect((leader1 + 2) % servers)
 
@@ -83,8 +82,6 @@ func TestRaft_MoreNodesCrashPersist(t *testing.T) {
 		env.Disconnect((leader1 + 3) % servers)
 		env.Disconnect((leader1 + 4) % servers)
 
-		fmt.Println("stop all but wake up", (leader1+1)%servers, (leader1+2)%servers)
-
 		env.Start1((leader1 + 1) % servers)
 		env.Start1((leader1 + 2) % servers)
 		env.Connect((leader1 + 1) % servers)
@@ -92,15 +89,11 @@ func TestRaft_MoreNodesCrashPersist(t *testing.T) {
 
 		sleep(2 * raft.ElectionTimeout)
 
-		fmt.Println("wake up", (leader1+3)%servers)
-
 		env.Start1((leader1 + 3) % servers)
 		env.Connect((leader1 + 3) % servers)
 
 		env.One(10+index, servers-2)
 		index++
-
-		fmt.Println("wake up all")
 
 		env.Connect((leader1 + 4) % servers)
 		env.Connect((leader1 + 0) % servers)

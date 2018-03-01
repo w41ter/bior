@@ -7,6 +7,7 @@ type Application interface {
 	Start(nodes []uint64) error
 	Shutdown()
 	Propose(data int) (uint64, uint64, bool)
+	GenSnapshot() (uint64, uint64)
 
 	GetState() (uint64, bool)
 	ApplyError() error
