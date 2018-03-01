@@ -53,13 +53,20 @@ func (app *application) ApplySnapshot(snapshot *raftpd.Snapshot) {
 
 	persist.SaveSnapshot(snapshot)
 	app.restoreFromSnapshot(snapshot)
+
+	rf := app.getRaft()
+	if rf != nil {
+		rf.Compact(snapshot)
+	}
 }
 
+// ReadSnapshot if snapshot is building at now, it will return nil,
+// so just ignore it and send message to it on next tick.
 func (app *application) ReadSnapshot() *raftpd.Snapshot {
 	persist := app.getPersist()
 
 	if persist == nil {
-		panic("read snapshot, but persist is nil")
+		return nil
 	}
 
 	return persist.ReadSnapshot()

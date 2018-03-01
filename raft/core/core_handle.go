@@ -163,7 +163,7 @@ func (c *core) tryRestore(snapshot *raftpd.Snapshot) bool {
 	}
 
 	if c.log.Term(snapshot.Metadata.Index) == snapshot.Metadata.Term {
-		c.log.CommitTo(snapshot.Metadata.Index)
+		// FIXME: c.log.CommitTo(snapshot.Metadata.Index)
 		return false
 	}
 
@@ -172,8 +172,8 @@ func (c *core) tryRestore(snapshot *raftpd.Snapshot) bool {
 
 func (c *core) handleSnapshot(msg *raftpd.Message) {
 	reply := raftpd.Message{
-		To:      msg.From,
 		MsgType: raftpd.MsgSnapshotResponse,
+		To:      msg.From,
 		Reject:  false,
 	}
 	if c.tryRestore(msg.Snapshot) {
@@ -181,21 +181,27 @@ func (c *core) handleSnapshot(msg *raftpd.Message) {
 			c.id, c.log.CommitIndex(),
 			msg.Snapshot.Metadata.Index, msg.Snapshot.Metadata.Term)
 
-		reply.Index = c.log.LastIndex()
+		reply.Index = msg.Snapshot.Metadata.Index
+		reply.RejectHint = c.log.LastIndex()
+		// applySnapshot should call ApplySnapshot to compact
 		c.callback.applySnapshot(msg.Snapshot)
 	} else {
 		log.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
 			c.id, c.log.CommitIndex(),
 			msg.Snapshot.Metadata.Index, msg.Snapshot.Metadata.Term)
 
-		reply.Index = c.log.CommitIndex()
+		reply.Index = msg.Snapshot.Metadata.Index
+		reply.RejectHint = c.log.CommitIndex()
 	}
 	c.send(&reply)
 }
 
 func (c *core) handleSnapshotResponse(msg *raftpd.Message) {
+	log.Debugf("%d received snapshot response from %d [rj: %v, idx: %d, hint: %d]",
+		c.id, msg.From, msg.Reject, msg.Index, msg.RejectHint)
+
 	node := c.getNodeByID(msg.From)
-	node.HandleSnapshot(msg.Reject, msg.Index)
+	node.HandleSnapshot(msg.Reject, msg.Index, msg.RejectHint)
 }
 
 func (c *core) handleUnreachable(msg *raftpd.Message) {
@@ -429,10 +435,8 @@ func (c *core) sendAppend(node *peer.Node) {
 }
 
 func (c *core) sendSnapshot(node *peer.Node) {
-	msg := raftpd.Message{}
-	msg.To = node.ID
-
 	snapshot := c.callback.readSnapshot()
+
 	// if snapshot is building at now, it will return nil,
 	// so just ignore it and send message to it on next tick.
 	if snapshot == nil {
@@ -441,15 +445,19 @@ func (c *core) sendSnapshot(node *peer.Node) {
 		return
 	}
 
-	log.Infof("%x [firstIndex: %d, commit: %d] send "+
-		"snapshot[index: %d, term: %d] to %x", c.id, c.log.FirstIndex(),
+	log.Infof("%x [firstIdx: %d, commit: %d] send "+
+		"snapshot[index: %d, term: %d] to %x", c.id, c.log.FirstIndex(), c.log.CommitIndex(),
 		snapshot.Metadata.Index, snapshot.Metadata.Term, node.ID)
 
 	node.SendSnapshot(snapshot.Metadata.Index)
 
 	log.Infof("%x paused sending replication messages to %x", c.id, node.ID)
-	msg.Snapshot = snapshot
-	msg.MsgType = raftpd.MsgSnapshotRequest
+
+	msg := raftpd.Message{
+		MsgType:  raftpd.MsgSnapshotRequest,
+		To:       node.ID,
+		Snapshot: snapshot,
+	}
 
 	c.send(&msg)
 }

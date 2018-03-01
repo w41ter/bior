@@ -9,6 +9,7 @@ import (
 
 type NodeApplication interface {
 	ApplySnapshot(snapshot *raftpd.Snapshot)
+	// if snapshot is building at now, it will return nil.
 	ReadSnapshot() *raftpd.Snapshot
 }
 

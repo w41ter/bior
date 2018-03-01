@@ -18,15 +18,6 @@ func MakePersister() *Persister {
 	return &Persister{}
 }
 
-// //
-// func (ps *Persister) Copy() *Persister {
-// 	ps.mu.Lock()
-// 	defer ps.mu.Unlock()
-// 	np := MakePersister()
-// 	np.snapshot = ps.snapshot
-// 	return np
-// }
-
 // SaveSnapshot save Raft snapshot
 func (ps *Persister) SaveSnapshot(snapshot *raftpd.Snapshot) {
 	ps.mu.Lock()
@@ -34,10 +25,14 @@ func (ps *Persister) SaveSnapshot(snapshot *raftpd.Snapshot) {
 	ps.snapshot = pd.MustMarshal(snapshot)
 }
 
-// ReadSnapshot read Raft snapshot saved before.
+// ReadSnapshot read Raft snapshot saved before, otherwise return nil.
 func (ps *Persister) ReadSnapshot() *raftpd.Snapshot {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+	if ps.snapshot == nil {
+		return nil
+	}
+
 	snapshot := &raftpd.Snapshot{}
 	pd.MustUnmarshal(snapshot, ps.snapshot)
 	return snapshot

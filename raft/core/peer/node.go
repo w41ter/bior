@@ -92,13 +92,17 @@ func (n *Node) HandleUnreachable() {
 }
 
 // HandleSnapshot trigger receive snapshot response event.
-func (n *Node) HandleSnapshot(reject bool, index uint64) {
+func (n *Node) HandleSnapshot(reject bool, index uint64, hintIndex uint64) {
 	switch n.state {
 	case nodeStateSnapshot:
-		// TODO: handle staled msg
+		if index != n.pendingSnapshot {
+			/* ignore */
+			return
+		}
+
 		if !reject {
-			n.Matched = index
-			n.NextIdx = index + 1
+			n.Matched = hintIndex
+			n.NextIdx = n.Matched + 1
 			n.becomeProbe()
 		} else {
 			log.Panicf("unreachable")
