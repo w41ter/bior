@@ -142,9 +142,10 @@ func TestNode_HandleUnreachable_replicate(t *testing.T) {
 
 func TestNode_handleSnapshot(t *testing.T) {
 	node := Node{
-		state: nodeStateSnapshot,
+		state:           nodeStateSnapshot,
+		pendingSnapshot: 1,
 	}
-	node.HandleSnapshot(false, 5)
+	node.HandleSnapshot(false, 1, 5)
 	if node.Matched != 5 || node.NextIdx != 6 {
 		t.Fatalf("wrong handle snapshot")
 	}
