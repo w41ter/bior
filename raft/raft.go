@@ -70,7 +70,10 @@ func MakeRaft(
 		},
 	})
 
-	w, err := CreateLogStorage(walDir, conf.InvalidIndex)
+	w, err := CreateLogStorage(walDir, Metadata{
+		Index: conf.InvalidIndex,
+		Term:  conf.InvalidTerm,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +87,7 @@ func MakeRaft(
 // RebuildRaft rebuild a instance of Raft.
 func RebuildRaft(
 	id uint64,
-	logSequenceNumber uint64,
+	meta Metadata,
 	nodes []uint64,
 	electionTimeout, heartbeatTimeout, tickSize int,
 	maxSizePerMsg uint,
@@ -92,7 +95,7 @@ func RebuildRaft(
 	application Application,
 	transport Transporter) (*Raft, error) {
 
-	ls, entries, state, err := RestoreLogStorage(walDir, logSequenceNumber)
+	ls, entries, state, err := RestoreLogStorage(walDir, meta)
 	if err != nil {
 		return nil, err
 	}

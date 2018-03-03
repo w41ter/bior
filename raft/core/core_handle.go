@@ -25,10 +25,10 @@ func (c *core) stepLeader(msg *raftpd.Message) {
 }
 
 func (c *core) stepFollower(msg *raftpd.Message) {
-	c.becomeFollower(c.term, msg.From)
 	switch msg.MsgType {
 	case raftpd.MsgReadIndexResponse:
-		// c.resetLease()
+		c.becomeFollower(c.term, msg.From)
+		// TODO: check
 		readState := read.ReadState{
 			Index:      msg.Index,
 			RequestCtx: msg.Context,
@@ -36,13 +36,13 @@ func (c *core) stepFollower(msg *raftpd.Message) {
 
 		c.callback.saveReadState(&readState)
 	case raftpd.MsgAppendRequest:
-		// c.resetLease()
+		c.becomeFollower(c.term, msg.From)
 		c.handleAppendEntries(msg)
 	case raftpd.MsgHeartbeatRequest:
-		// c.resetLease()
+		c.becomeFollower(c.term, msg.From)
 		c.handleHeartbeat(msg)
 	case raftpd.MsgSnapshotRequest:
-		// c.resetLease()
+		c.becomeFollower(c.term, msg.From)
 		c.handleSnapshot(msg)
 	}
 }
@@ -370,6 +370,11 @@ func (c *core) sendHeartbeat(node *peer.Node, context []byte) {
 // broadcastAppend send append or snapshot to followers.
 func (c *core) broadcastAppend() {
 	firstIndex := c.log.FirstIndex()
+	lastIndex := c.log.LastIndex()
+
+	log.Debugf("%d broadcast message at term: %d [%d, %d]",
+		c.id, c.term, firstIndex, lastIndex)
+
 	for i := 0; i < len(c.nodes); i++ {
 		node := c.nodes[i]
 		/* ignore paused node */

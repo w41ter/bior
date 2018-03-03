@@ -8,6 +8,11 @@ import (
 	"github.com/thinkermao/wal-go"
 )
 
+type Metadata struct {
+	Index uint64
+	Term  uint64
+}
+
 type recordType int
 
 const (
@@ -30,8 +35,8 @@ type logStorage struct {
 	wal *wal.Wal
 }
 
-func CreateLogStorage(walDir string, index uint64) (*logStorage, error) {
-	w, err := wal.Create(walDir, index)
+func CreateLogStorage(walDir string, meta Metadata) (*logStorage, error) {
+	w, err := wal.Create(walDir, meta.Index)
 	if err != nil {
 		return nil, err
 	}
@@ -39,10 +44,18 @@ func CreateLogStorage(walDir string, index uint64) (*logStorage, error) {
 	return &logStorage{wal: w}, nil
 }
 
-func RestoreLogStorage(walDir string, index uint64) (
+// RestoreLogStorage restore records for raft from wal,
+// entries has a dummy entry from meta.
+func RestoreLogStorage(walDir string, meta Metadata) (
 	ls *logStorage, entries []raftpd.Entry, HS raftpd.HardState, err error) {
 
 	entries = []raftpd.Entry{}
+	// dummy entry
+	entries = append(entries, raftpd.Entry{
+		Type:  raftpd.EntryNormal,
+		Index: meta.Index,
+		Term:  meta.Term,
+	})
 
 	recordReader := func(index uint64, data []byte) error {
 		var record record
@@ -78,7 +91,7 @@ func RestoreLogStorage(walDir string, index uint64) (
 	}
 
 	var w *wal.Wal
-	w, err = wal.Open(walDir, index, recordReader)
+	w, err = wal.Open(walDir, meta.Index, recordReader)
 	if err != nil {
 		return
 	}

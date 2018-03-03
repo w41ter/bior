@@ -50,6 +50,7 @@ func MakeLogHolder(id uint64, firstIndex uint64, firstTerm uint64) *LogHolder {
 
 	// make dummy entry.
 	entries := make([]raftpd.Entry, 1)
+	entries[0].Type = raftpd.EntryNormal
 	entries[0].Index = firstIndex
 	entries[0].Term = firstTerm
 	return &LogHolder{
@@ -72,7 +73,7 @@ func RebuildLogHolder(id uint64, entries []raftpd.Entry) *LogHolder {
 	lastStabled := entries[len(entries)-1].Index
 	lastTerm := entries[len(entries)-1].Term
 
-	log.Debugf("rebuild log holder id: %d [idx: %d-%d, term: %d-%d]",
+	log.Debugf("%d rebuild log holder [idx: %d-%d, term: %d-%d]",
 		id, firstIndex, lastStabled, firstTerm, lastTerm)
 
 	// copy make unique constraint.

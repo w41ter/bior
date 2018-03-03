@@ -98,6 +98,9 @@ func makeCore(config *conf.Config, callback application) *core {
 		"%d [Term: %d] last idx: %d less than commit: %d",
 		c.id, c.term, c.log.LastIndex(), c.log.CommitIndex())
 
+	log.Debugf("%d build raft at term: %d [firstIdx: %d, lastIdx: %d, commitIdx: %d]",
+		c.id, c.term, c.log.FirstIndex(), c.log.LastIndex(), c.log.CommitIndex())
+
 	return c
 }
 
