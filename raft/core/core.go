@@ -203,6 +203,7 @@ func (c *core) Step(msg *raftpd.Message) {
 		// but it still can't solve when some node become candidate,
 		// and leader come up.
 		c.reject(msg)
+		return
 	} else if msg.Term > c.term {
 		if msg.MsgType == raftpd.MsgPreVoteRequest {
 			// currentTerm never changes when receiving a PreVote.
@@ -213,14 +214,10 @@ func (c *core) Step(msg *raftpd.Message) {
 			// rejected our vote so we should become a follower at the new
 			// term.
 		} else {
-			// important: set leader id for future request, such as ReadIndex.
-			leaderID := msg.From
-			if msg.MsgType == raftpd.MsgVoteRequest {
-				leaderID = conf.InvalidID
-			}
+			// leader id will set after received really msg from leader.
 			log.Infof("%d [Term: %d] receive a %s message with higher Term from %d [Term: %d]",
 				c.id, c.term, msg.MsgType, msg.From, msg.Term)
-			c.becomeFollower(msg.Term, leaderID)
+			c.becomeFollower(msg.Term, conf.InvalidID)
 		}
 	}
 

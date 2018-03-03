@@ -264,3 +264,10 @@ func (c *core) resetNodesProgress() {
 func (c *core) nextIndex() uint64 {
 	return c.log.LastIndex() + 1
 }
+
+// backToFollower used by preCandidate/Candidate to
+// go back to follower campaign failed.
+func (c *core) backToFollower(term uint64, leaderID uint64) {
+	c.vote = leaderID
+	c.becomeFollower(term, leaderID)
+}

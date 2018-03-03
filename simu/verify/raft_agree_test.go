@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/thinkermao/bior/raft/core/conf"
 	"github.com/thinkermao/bior/raft/core/peer"
@@ -157,7 +156,7 @@ func TestRaft_RejoinAgree(t *testing.T) {
 	fmt.Printf("  ... Passed\n")
 }
 
-func TestRaft_BackupAgree(t *testing.T) {
+func TestRaft_BackupQuicklyAgree(t *testing.T) {
 	peer.Simulation = true
 	servers := 5
 	env := envior.MakeEnvironment(t, servers, false)
@@ -178,7 +177,7 @@ func TestRaft_BackupAgree(t *testing.T) {
 		env.Propose(leader1, rand.Int())
 	}
 
-	time.Sleep(raft.ElectionTimeout / 2)
+	sleep(raft.ElectionTimeout / 2)
 
 	env.Disconnect((leader1 + 0) % servers)
 	env.Disconnect((leader1 + 1) % servers)
@@ -206,7 +205,7 @@ func TestRaft_BackupAgree(t *testing.T) {
 		env.Propose(leader2, rand.Int())
 	}
 
-	time.Sleep(raft.ElectionTimeout / 2)
+	sleep(raft.ElectionTimeout / 2)
 
 	// bring original leader back to life,
 	for i := 0; i < servers; i++ {

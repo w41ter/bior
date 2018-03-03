@@ -65,13 +65,13 @@ func (c *core) stepCandidate(msg *raftpd.Message) {
 		// to be leader whose term is at least as large as the candidate's current term,
 		// it recognizes the leader as legitimate and returns to follower state.
 	case raftpd.MsgAppendRequest:
-		c.becomeFollower(msg.Term, msg.From)
+		c.backToFollower(msg.Term, msg.From)
 		c.handleAppendEntries(msg)
 	case raftpd.MsgHeartbeatRequest:
-		c.becomeFollower(msg.Term, msg.From)
+		c.backToFollower(msg.Term, msg.From)
 		c.handleHeartbeat(msg)
 	case raftpd.MsgSnapshotRequest:
-		c.becomeFollower(msg.Term, msg.From)
+		c.backToFollower(msg.Term, msg.From)
 		c.handleSnapshot(msg)
 	}
 }
@@ -339,7 +339,7 @@ func (c *core) handleVoteResponse(msg *raftpd.Message) {
 	// return to follower state if it receives vote denial from a majority
 	count = c.voteStateCount(peer.VoteReject)
 	if count >= c.quorum() {
-		c.becomeFollower(msg.Term, conf.InvalidID)
+		c.backToFollower(msg.Term, conf.InvalidID)
 	}
 }
 
