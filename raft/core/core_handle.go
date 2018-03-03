@@ -215,14 +215,13 @@ func (c *core) handleUnreachable(msg *raftpd.Message) {
 }
 
 func (c *core) handleHeartbeat(msg *raftpd.Message) {
-	c.leaderID = msg.From
-	c.timeElapsed = 0
 	c.log.CommitTo(msg.Index)
 
 	reply := raftpd.Message{
 		To:      msg.From,
 		Reject:  false,
 		MsgType: raftpd.MsgHeartbeatResponse,
+		Context: msg.Context,
 	}
 	c.send(&reply)
 }

@@ -24,6 +24,7 @@ func MakeReadOnly() *ReadOnly {
 	}
 }
 
+// AddRequest add new read request with context.
 func (ro *ReadOnly) AddRequest(index uint64, to uint64, context []byte) {
 	ctx := string(context)
 	if _, ok := ro.pendingReadIndex[ctx]; ok {
@@ -37,6 +38,7 @@ func (ro *ReadOnly) AddRequest(index uint64, to uint64, context []byte) {
 	ro.readIndexQueue = append(ro.readIndexQueue, ctx)
 }
 
+// ReceiveAck handle remote heartbeat response with context.
 func (ro *ReadOnly) ReceiveAck(from uint64, context []byte) int {
 	rs, ok := ro.pendingReadIndex[string(context)]
 	if !ok {

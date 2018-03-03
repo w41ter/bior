@@ -167,6 +167,8 @@ func (raft *Raft) ready() (rd core.Ready) {
 }
 
 func (raft *Raft) handleRaftReady() {
+	var lastApplied uint64 = conf.InvalidIndex
+
 	ready := raft.ready()
 	// FIXME: 在save之前可以先处理 readStateNotice
 	if err := raft.wal.save(ready.SS.LastIndex, ready.HS, ready.Entries); err != nil {
@@ -179,6 +181,7 @@ func (raft *Raft) handleRaftReady() {
 	for i := 0; i < len(ready.CommitEntries); i++ {
 		// FIXME: 是否有必要将更改配置信息应用
 		raft.callback.ApplyEntry(&ready.CommitEntries[i])
+		lastApplied = ready.CommitEntries[i].Index
 	}
 
 	if len(ready.CommitEntries) > 0 {
@@ -199,8 +202,14 @@ func (raft *Raft) handleRaftReady() {
 	raft.mutex.Unlock()
 
 	for i := 0; i < len(ready.ReadStates); i++ {
-		raft.callback.ReadStateNotice(ready.ReadStates[i].Index,
-			ready.ReadStates[i].RequestCtx)
+		if ready.ReadStates[i].Index <= lastApplied {
+			raft.callback.ReadStateNotice(ready.ReadStates[i].Index,
+				ready.ReadStates[i].RequestCtx)
+		} else {
+			// drain saved read states.
+			length := copy(ready.ReadStates[:i], ready.ReadStates[i:])
+			ready.ReadStates = ready.ReadStates[:length]
+		}
 	}
 
 	// send messages accumulation at raft.msg

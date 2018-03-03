@@ -52,6 +52,10 @@ type core struct {
 	electionTick           int // basis election tick
 	heartbeatTick          int // heartbeat timeout tick
 
+	// member-ship change fields.
+	pendingConf bool // new configuration is ignored if
+	// there exists unapplied configuration.
+
 	// Other fields.
 	maxSizePerMsg uint
 	readOnly      *read.ReadOnly
@@ -74,6 +78,7 @@ func makeCore(config *conf.Config, callback application) *core {
 	c.id = config.ID
 	c.leaderID = conf.InvalidID
 	c.state = RoleFollower
+
 	/* make nodes */
 	c.nodes = make([]*peer.Node, 0)
 	lastIndex := c.log.LastIndex()
@@ -89,6 +94,9 @@ func makeCore(config *conf.Config, callback application) *core {
 	c.electionTick = config.ElectionTick
 	c.heartbeatTick = config.HeartbeatTick
 	c.resetRandomizedElectionTimeout()
+
+	// member-ship change fields.
+	c.pendingConf = false
 
 	c.callback = callback
 	c.readOnly = read.MakeReadOnly()
@@ -154,6 +162,11 @@ func (c *core) ProposeConfChange(cc *raftpd.ConfChange) (
 		return conf.InvalidIndex, conf.InvalidTerm, false
 	}
 
+	if c.pendingConf {
+		log.Infof("propose conf ignored since pending unapplied configuration")
+	}
+	c.pendingConf = true
+
 	entry := raftpd.Entry{
 		Index: c.log.LastIndex() + 1,
 		Term:  c.term,
@@ -171,6 +184,11 @@ func (c *core) ProposeConfChange(cc *raftpd.ConfChange) (
 // Read propose a read only request, context is the unique id
 // for request.
 func (c *core) Read(context []byte) bool {
+	// leader must has committed entry at current term.
+	if c.log.Term(c.log.CommitIndex()) != c.term {
+		return false
+	}
+
 	switch c.state {
 	case RoleLeader:
 		c.readOnly.AddRequest(c.log.CommitIndex(), c.id, context)
@@ -180,10 +198,11 @@ func (c *core) Read(context []byte) bool {
 		if c.leaderID == conf.InvalidID {
 			return false
 		}
-		msg := raftpd.Message{}
-		msg.To = c.leaderID
-		msg.MsgType = raftpd.MsgReadIndexRequest
-		msg.Context = context
+		msg := raftpd.Message{
+			MsgType: raftpd.MsgReadIndexRequest,
+			To:      c.leaderID,
+			Context: context,
+		}
 		c.send(&msg)
 	}
 	return true
