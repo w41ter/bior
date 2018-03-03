@@ -97,6 +97,20 @@ func makeNetwork(prs ...*RawNode) *network {
 	return &net
 }
 
+func generate(size uint64) *network {
+	ids := []uint64{}
+	for i := uint64(1); i <= size; i++ {
+		ids = append(ids, i)
+	}
+
+	rafts := []*RawNode{}
+	for i := 0; i < len(ids); i++ {
+		rafts = append(rafts, makeTestRaft(ids[i], ids, 10, 1, nil, nil))
+	}
+
+	return makeNetwork(rafts...)
+}
+
 func (n *network) add(node *RawNode) {
 	n.peers[node.id] = node
 }
@@ -126,10 +140,12 @@ func (n *network) dispatchMessages() {
 		// Drop the message if the remote peer is dead or
 		// the connection to remote is cut down.
 		if _, ok := n.peers[msg.To]; !ok || n.cutMap[msg.From] == msg.To {
+			n.peers[msg.From].Unreachable(msg.To)
 			continue
 		}
 		// ignore the message
 		if _, ok := n.ignoreType[msg.MsgType]; ok {
+			n.peers[msg.From].Unreachable(msg.To)
 			continue
 		}
 		n.peers[msg.To].Step(&msg)
