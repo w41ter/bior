@@ -54,13 +54,7 @@ func (c *core) becomeFollower(term, leaderID uint64) {
 	c.reset(term)
 	c.leaderID = leaderID
 	c.state = RoleFollower
-	if c.vote != conf.InvalidID && leaderID != conf.InvalidID {
-		utils.Assert(c.vote == leaderID,
-			"%d vote %d at term: %d, but become follower of %d",
-			c.id, c.vote, c.term, leaderID)
-	} else {
-		c.vote = leaderID
-	}
+	c.vote = leaderID
 
 	if leaderID != conf.InvalidID {
 		log.Infof("%v become %d's follower at %d", c.id, leaderID, c.term)
