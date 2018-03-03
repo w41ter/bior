@@ -300,3 +300,7 @@ func (env *Environment) One(cmd int, expectedServers int) int {
 func (env *Environment) GenSnapshot(id int) (uint64, uint64) {
 	return env.apps[id].GenSnapshot()
 }
+
+func (env *Environment) IsCrash(id int) bool {
+	return env.apps[id].IsCrash()
+}

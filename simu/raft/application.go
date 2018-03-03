@@ -6,6 +6,7 @@ type Application interface {
 	Kill()
 	Start(nodes []uint64) error
 	Shutdown()
+	IsCrash() bool
 	Propose(data int) (uint64, uint64, bool)
 	GenSnapshot() (uint64, uint64)
 

@@ -105,7 +105,11 @@ func (app *application) Start(nodes []uint64) error {
 			tickSize, MaxSizePerMsg, app.walDir, app, app)
 	} else {
 		snapshot := app.ReadSnapshot()
-		rf, err = raft.RebuildRaft(app.id, snapshot.Metadata.Index,
+		meta := raft.Metadata{
+			Index: snapshot.Metadata.Index,
+			Term:  snapshot.Metadata.Term,
+		}
+		rf, err = raft.RebuildRaft(app.id, meta,
 			nodes, ElectionTimeout, HeartbeatTimeout,
 			tickSize, MaxSizePerMsg, app.walDir, app, app)
 		app.restoreFromSnapshot(snapshot)
@@ -263,4 +267,9 @@ func (app *application) GenSnapshot() (uint64, uint64) {
 		rf.Compact(snapshot)
 	}
 	return snapshot.Metadata.Index, snapshot.Metadata.Term
+}
+
+func (app *application) IsCrash() bool {
+	rf := app.getRaft()
+	return rf == nil
 }
