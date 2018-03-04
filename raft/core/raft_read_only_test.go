@@ -34,6 +34,7 @@ func TestRaft_BasicReadOnly(t *testing.T) {
 		// notice noop entry.
 		{a, 10, 11, []byte("ctx1")},
 		{a, 10, 21, []byte("ctx2")},
+		{b, 0, 21, []byte("ctx2")},
 	}
 
 	for i, test := range tests {

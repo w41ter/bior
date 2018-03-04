@@ -28,13 +28,7 @@ func (c *core) stepFollower(msg *raftpd.Message) {
 	switch msg.MsgType {
 	case raftpd.MsgReadIndexResponse:
 		c.becomeFollower(c.term, msg.From)
-		// TODO: check
-		readState := read.ReadState{
-			Index:      msg.Index,
-			RequestCtx: msg.Context,
-		}
-
-		c.callback.saveReadState(&readState)
+		c.handleReadIndexResponse(msg)
 	case raftpd.MsgAppendRequest:
 		c.becomeFollower(c.term, msg.From)
 		c.handleAppendEntries(msg)
@@ -92,7 +86,7 @@ func (c *core) dispatch(msg *raftpd.Message) {
 func (c *core) handleReadIndexRequest(msg *raftpd.Message) {
 	utils.Assert(c.quorum() > 1 && c.state.IsLeader(), "receive wrong message")
 	// c must be leader, so term great than InvalidTerm.
-	if c.log.CommitIndex() != c.term {
+	if c.log.Term(c.log.CommitIndex()) != c.term {
 		// Reject read only request when this leader has not
 		// committed any log entry at its term. (raft thesis 6.4)
 		return
@@ -100,6 +94,16 @@ func (c *core) handleReadIndexRequest(msg *raftpd.Message) {
 
 	c.readOnly.AddRequest(c.log.CommitIndex(), msg.From, msg.Context)
 	c.broadcastHeartbeatWithCtx(msg.Context)
+}
+
+func (c *core) handleReadIndexResponse(msg *raftpd.Message) {
+	// TODO: check
+	readState := read.ReadState{
+		Index:      msg.Index,
+		RequestCtx: msg.Context,
+	}
+
+	c.callback.saveReadState(&readState)
 }
 
 // RPC:

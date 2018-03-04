@@ -184,15 +184,16 @@ func (c *core) ProposeConfChange(cc *raftpd.ConfChange) (
 // Read propose a read only request, context is the unique id
 // for request.
 func (c *core) Read(context []byte) bool {
-	// leader must has committed entry at current term.
-	if c.log.Term(c.log.CommitIndex()) != c.term {
-		return false
-	}
-
 	switch c.state {
 	case RoleLeader:
-		c.readOnly.AddRequest(c.log.CommitIndex(), c.id, context)
-		c.broadcastHeartbeatWithCtx(context)
+		msg := raftpd.Message{
+			MsgType: raftpd.MsgReadIndexRequest,
+			From:    c.id,
+			To:      c.id,
+			Term:    c.term,
+			Context: context,
+		}
+		c.handleReadIndexRequest(&msg)
 	case RoleFollower:
 		// redirect to leader
 		if c.leaderID == conf.InvalidID {
