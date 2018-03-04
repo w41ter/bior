@@ -156,31 +156,6 @@ func (c *core) Propose(bytes []byte) (index uint64, term uint64, isLeader bool) 
 	return entry.Index, entry.Term, true
 }
 
-func (c *core) ProposeConfChange(cc *raftpd.ConfChange) (
-	index uint64, term uint64, isLeader bool) {
-	if !c.state.IsLeader() {
-		return conf.InvalidIndex, conf.InvalidTerm, false
-	}
-
-	if c.pendingConf {
-		log.Infof("propose conf ignored since pending unapplied configuration")
-	}
-	c.pendingConf = true
-
-	entry := raftpd.Entry{
-		Index: c.log.LastIndex() + 1,
-		Term:  c.term,
-		Type:  raftpd.EntryConfChange,
-		Data:  pd.MustMarshal(cc),
-	}
-
-	// Leader Append-Only: a leader never overwrites or deletes
-	// entries in its log; it only appends new entries. §5.3
-	c.log.Append([]raftpd.Entry{entry})
-
-	return entry.Index, entry.Term, true
-}
-
 // Read propose a read only request, context is the unique id
 // for request.
 func (c *core) Read(context []byte) bool {
@@ -270,28 +245,37 @@ func (c *core) Periodic(millsSinceLastPeriod int) {
 	}
 }
 
+func (c *core) ProposeConfChange(cc *raftpd.ConfChange) (
+	index uint64, term uint64, isLeader bool) {
+	if !c.state.IsLeader() {
+		return conf.InvalidIndex, conf.InvalidTerm, false
+	}
+
+	if c.pendingConf {
+		log.Infof("propose conf ignored since pending unapplied configuration")
+	}
+	c.pendingConf = true
+
+	entry := raftpd.Entry{
+		Index: c.log.LastIndex() + 1,
+		Term:  c.term,
+		Type:  raftpd.EntryConfChange,
+		Data:  pd.MustMarshal(cc),
+	}
+
+	// Leader Append-Only: a leader never overwrites or deletes
+	// entries in its log; it only appends new entries. §5.3
+	c.log.Append([]raftpd.Entry{entry})
+
+	return entry.Index, entry.Term, true
+}
+
 func (c *core) ApplyConfChange(cc *raftpd.ConfChange) raftpd.ConfState {
 	switch cc.ChangeType {
 	case raftpd.ConfChangeAddNode:
-		// Ignore any redundant addNode calls (which can happen because the
-		// initial bootstrapping entries are applied twice).
-		var node = c.getNodeByID(cc.NodeID)
-		if node != nil {
-			return c.ReadConfState()
-		}
-		lastIndex := c.log.LastIndex()
-		c.nodes = append(c.nodes, peer.MakeNode(c.id, cc.NodeID, lastIndex))
+		c.addNode(cc.NodeID)
 	case raftpd.ConfChangeRemoveNode:
-		for i := 0; i < len(c.nodes); i++ {
-			if c.nodes[i].ID != cc.NodeID {
-				continue
-			}
-			for j := i; j+1 < len(c.nodes); j++ {
-				c.nodes[j] = c.nodes[j+1]
-			}
-			c.nodes = c.nodes[:len(c.nodes)-1]
-			return c.ReadConfState()
-		}
+		c.removeNode(cc.NodeID)
 	}
 	return c.ReadConfState()
 }

@@ -48,6 +48,7 @@ func (c *core) reset(term uint64) {
 	}
 	c.leaderID = conf.InvalidID
 	c.resetLease()
+	c.pendingConf = false
 }
 
 func (c *core) becomeFollower(term, leaderID uint64) {
@@ -70,6 +71,12 @@ func (c *core) becomeLeader() {
 	c.reset(c.term)
 	c.leaderID = c.id
 	c.state = RoleLeader
+
+	num := c.numOfPendingConf()
+	if num > 1 {
+		panic("unexpected multiple uncommitted config entry")
+	}
+	c.pendingConf = num == 1 // whether there has conf entry.
 
 	utils.Assert(c.vote == c.id, "leader will vote itself")
 
@@ -175,8 +182,7 @@ func (c *core) getNodeByID(nodeID uint64) *peer.Node {
 			return c.nodes[i]
 		}
 	}
-	log.Panicf("not found node with Id: %d", nodeID)
-	panic("") /* solve return error */
+	return nil
 }
 
 // when someone become leader, commit empty entry first
@@ -264,4 +270,44 @@ func (c *core) nextIndex() uint64 {
 func (c *core) backToFollower(term uint64, leaderID uint64) {
 	c.vote = leaderID
 	c.becomeFollower(term, leaderID)
+}
+
+func (c *core) numOfPendingConf() int {
+	var num int
+	entries := c.log.Slice(c.log.CommitIndex()+1, c.log.LastIndex()+1)
+	for i := 0; i < len(entries); i++ {
+		if entries[i].Type == raftpd.EntryConfChange {
+			num++
+		}
+	}
+	return num
+}
+
+func (c *core) addNode(nodeID uint64) {
+	c.pendingConf = false
+
+	// Ignore any redundant addNode calls (which can happen because the
+	// initial bootstrapping entries are applied twice).
+	var node = c.getNodeByID(nodeID)
+	if node != nil {
+		return
+	}
+	lastIndex := c.log.LastIndex()
+	c.nodes = append(c.nodes, peer.MakeNode(c.id, nodeID, lastIndex))
+}
+
+func (c *core) removeNode(nodeID uint64) {
+	c.pendingConf = false
+
+	for i := 0; i < len(c.nodes); i++ {
+		if c.nodes[i].ID != nodeID {
+			continue
+		}
+
+		for j := i; j+1 < len(c.nodes); j++ {
+			c.nodes[j] = c.nodes[j+1]
+		}
+		c.nodes = c.nodes[:len(c.nodes)-1]
+		return
+	}
 }
