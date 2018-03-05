@@ -10,8 +10,8 @@ Bior is a implements of raft consensus algorithm in go, it supported features(�
 - [✓] Log Replication
 - [✓] Flow control
 - [✓] log compaction
-- [-] Membership change
-- [-] Read index
+- [✓] Membership change
+- [✓] Read index
 
 features implementing:
 
