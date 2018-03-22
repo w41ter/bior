@@ -177,8 +177,10 @@ func (raft *Raft) handleRaftReady() {
 	}
 
 	for i := 0; i < len(ready.CommitEntries); i++ {
-		// FIXME: 是否有必要将更改配置信息应用
-		raft.callback.ApplyEntry(&ready.CommitEntries[i])
+		entry := &ready.CommitEntries[i]
+		if entry.Type == raftpd.EntryNormal {
+			raft.callback.ApplyEntry(entry)
+		}
 	}
 
 	if len(ready.CommitEntries) > 0 {
