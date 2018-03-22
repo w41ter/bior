@@ -209,6 +209,7 @@ func (raft *Raft) handleRaftReady() {
 			// drain saved read states.
 			length := copy(ready.ReadStates[:i], ready.ReadStates[i:])
 			ready.ReadStates = ready.ReadStates[:length]
+			break
 		}
 	}
 

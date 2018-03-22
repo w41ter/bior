@@ -9,9 +9,9 @@ import (
 
 // Invalid value for raft.
 const (
-	InvalidIndex = 0
-	InvalidID    = math.MaxUint64
-	InvalidTerm  = 0
+	InvalidIndex uint64 = 0
+	InvalidID    uint64 = math.MaxUint64
+	InvalidTerm  uint64 = 0
 )
 
 // Config given information to build raft algorithm.

@@ -237,10 +237,10 @@ func (c *core) applyEntries() {
 	numberOfEntries := len(entries)
 	for i := 0; i < numberOfEntries; i++ {
 		entry := &entries[i]
-		if entry.Type == raftpd.EntryBroadcast {
-			/* ignore broadcast entry */
-			continue
-		}
+		//if entry.Type == raftpd.EntryBroadcast {
+		//	/* ignore broadcast entry */
+		//	continue
+		//}
 		c.callback.applyEntry(entry)
 	}
 }

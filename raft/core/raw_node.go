@@ -96,7 +96,7 @@ func (node *RawNode) Ready() Ready {
 	ready.Entries = node.core.log.StableEntries()
 	ready.CommitEntries = node.commitEntries
 	ready.Messages = node.messages
-	ready.ReadStates = node.readStates
+	ready.ReadStates = node.drainReadState()
 
 	log.Debugf("%d handle ready: [stable: %d, commit: %d, msg: %d]",
 		node.id, len(ready.Entries), len(ready.CommitEntries), len(ready.Messages))
@@ -134,4 +134,22 @@ func (node *RawNode) applySnapshot(snapshot *raftpd.Snapshot) {
 
 func (node *RawNode) readSnapshot() *raftpd.Snapshot {
 	return node.application.ReadSnapshot()
+}
+
+func (node *RawNode) drainReadState() []read.ReadState {
+	var readStates []read.ReadState
+	if len(node.commitEntries) > 0 {
+		lastApplied := node.commitEntries[len(node.commitEntries)-1].Index
+		for i := 0; i < len(node.readStates); i++ {
+			if node.readStates[i].Index <= lastApplied {
+				continue
+			}
+			//save and drain read states.
+			readStates = make([]read.ReadState, 0, i)
+			copy(readStates, node.readStates)
+			length := copy(node.readStates[:i], node.readStates[i:])
+			node.readStates = node.readStates[:length]
+		}
+	}
+	return readStates
 }
