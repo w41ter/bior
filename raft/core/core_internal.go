@@ -17,8 +17,11 @@ func quorum(len int) int {
 // send send message to remote peers.
 func (c *core) send(msg *raftpd.Message) {
 	if msg.MsgType == raftpd.MsgPreVoteRequest {
-		/* request pre vote: next term */
+		/* request pre vote: future term */
 		msg.Term = c.term + 1
+	} else if msg.MsgType == raftpd.MsgPreVoteResponse {
+		/* don't change term of prevote response, so
+		sender need set term by self. */
 	} else {
 		msg.Term = c.term
 	}

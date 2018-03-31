@@ -202,7 +202,7 @@ func (c *core) Step(msg *raftpd.Message) {
 	} else if msg.Term > c.term {
 		if msg.MsgType == raftpd.MsgPreVoteRequest {
 			// currentTerm never changes when receiving a PreVote.
-		} else if msg.MsgType == raftpd.MsgPreVoteResponse && msg.Reject {
+		} else if msg.MsgType == raftpd.MsgPreVoteResponse && !msg.Reject {
 			// We send pre-vote requests with a term in our future. If the
 			// pre-vote is granted, we will increment our term when we get a
 			// quorum. If it is not, the term comes from the node that
@@ -241,6 +241,10 @@ func (c *core) Periodic(millsSinceLastPeriod int) {
 	} else if c.randomizedElectionTick <= c.timeElapsed {
 		if len(c.nodes) > 1 {
 			c.preCampaign()
+		} else {
+			// if there only one peer, just become leader.
+			c.becomeCandidate()
+			c.becomeLeader()
 		}
 	}
 }

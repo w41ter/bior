@@ -2,10 +2,10 @@ package verify
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/thinkermao/bior/raft/core/conf"
 	"github.com/thinkermao/bior/raft/core/peer"
 	"github.com/thinkermao/bior/simu/env"
@@ -164,7 +164,7 @@ func TestRaft_BackupQuicklyAgree(t *testing.T) {
 
 	fmt.Printf("Test: leader backs up quickly over incorrect follower logs ...\n")
 
-	env.One(rand.Int(), servers)
+	env.One(0, servers)
 
 	// put leader and one follower in a partition
 	leader1 := env.CheckOneLeader()
@@ -174,7 +174,7 @@ func TestRaft_BackupQuicklyAgree(t *testing.T) {
 
 	// submit lots of commands that won't commit
 	for i := 0; i < 50; i++ {
-		env.Propose(leader1, rand.Int())
+		env.Propose(leader1, i+1)
 	}
 
 	sleep(raft.ElectionTimeout / 2)
@@ -189,7 +189,7 @@ func TestRaft_BackupQuicklyAgree(t *testing.T) {
 
 	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
-		env.One(rand.Int(), 3)
+		env.One(51+i, 3)
 	}
 
 	// now another partitioned leader and one follower
@@ -202,7 +202,7 @@ func TestRaft_BackupQuicklyAgree(t *testing.T) {
 
 	// lots more commands that won't commit
 	for i := 0; i < 50; i++ {
-		env.Propose(leader2, rand.Int())
+		env.Propose(leader2, 101+i)
 	}
 
 	sleep(raft.ElectionTimeout / 2)
@@ -215,16 +215,18 @@ func TestRaft_BackupQuicklyAgree(t *testing.T) {
 	env.Connect((leader1 + 1) % servers)
 	env.Connect(other)
 
+	logrus.Debugf("begin lots of successful commands to new group")
+
 	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
-		env.One(rand.Int(), 3)
+		env.One(151+i, 3)
 	}
 
 	// now everyone
 	for i := 0; i < servers; i++ {
 		env.Connect(i)
 	}
-	env.One(rand.Int(), servers)
+	env.One(1000, servers)
 
 	fmt.Printf("  ... Passed\n")
 }

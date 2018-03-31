@@ -284,10 +284,22 @@ func (c *core) handlePreVote(msg *raftpd.Message) {
 		!c.log.IsUpToDate(msg.LogIndex, msg.LogTerm) {
 		/* rejected */
 		reply.Reject = true
+		reply.Term = c.term
 		log.Infof("%d [term: %d] reject pre vote request from %d", c.id, c.term, msg.From)
 	} else {
+		// When responding to MsgPreVote messages we include the term
+		// from the message, not the local term. To see why consider the
+		// case where a single node was previously partitioned away and
+		// it's local term is now of date. If we include the local term
+		// (recall that for pre-votes we don't update the local term), the
+		// pre-campaigning node on the other end will proceed to ignore
+		// the message (it ignores all out of date messages).
+		// The term in the original message and current local term are the
+		// same in the case of regular votes, but different for pre-votes.
+
 		/* accept */
 		reply.Reject = false
+		reply.Term = msg.Term
 		log.Infof("%d [term: %d] accept vote request from %d", c.id, c.term, msg.From)
 	}
 
