@@ -84,7 +84,7 @@ func (c *core) dispatch(msg *raftpd.Message) {
 }
 
 func (c *core) handleReadIndexRequest(msg *raftpd.Message) {
-	utils.Assert(c.quorum() > 1 && c.state.IsLeader(), "receive wrong message")
+	utils.Assert(c.state.IsLeader(), "receive wrong message")
 	// c must be leader, so term great than InvalidTerm.
 	if c.log.Term(c.log.CommitIndex()) != c.term {
 		// Reject read only request when this leader has not
@@ -93,7 +93,12 @@ func (c *core) handleReadIndexRequest(msg *raftpd.Message) {
 	}
 
 	c.readOnly.AddRequest(c.log.CommitIndex(), msg.From, msg.Context)
-	c.broadcastHeartbeatWithCtx(msg.Context)
+
+	if c.quorum() > 1 {
+		c.broadcastHeartbeatWithCtx(msg.Context)
+	} else {
+		c.advanceReadOnly(msg.Context)
+	}
 }
 
 func (c *core) handleReadIndexResponse(msg *raftpd.Message) {
@@ -243,31 +248,7 @@ func (c *core) handleHeartbeatResponse(msg *raftpd.Message) {
 	}
 	log.Debugf("%d [term: %d] handle heartbeat response from %d", c.id, c.term, msg.From)
 
-	rss := c.readOnly.Advance(msg.Context)
-	for _, rs := range rss {
-		if rs.To == c.id {
-			log.Debugf("%d [term: %d] save read state: %d, %v",
-				c.id, c.term, rs.Index, rs.Context)
-
-			readState := read.ReadState{
-				Index:      rs.Index,
-				RequestCtx: rs.Context,
-			}
-
-			c.callback.saveReadState(&readState)
-		} else {
-			log.Debugf("%d [term: %d] redirect heartbeat response %d to %d %v",
-				c.id, c.term, rs.Index, rs.To, rs.Context)
-
-			redirect := raftpd.Message{
-				To:      rs.To,
-				MsgType: raftpd.MsgReadIndexResponse,
-				Index:   rs.Index,
-				Context: rs.Context,
-			}
-			c.send(&redirect)
-		}
-	}
+	c.advanceReadOnly(msg.Context)
 }
 
 func (c *core) voteStateCount(state peer.VoteState) int {

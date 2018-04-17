@@ -6,6 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/thinkermao/bior/raft/core/conf"
 	"github.com/thinkermao/bior/raft/core/peer"
+	"github.com/thinkermao/bior/raft/core/read"
 	"github.com/thinkermao/bior/raft/proto"
 	"github.com/thinkermao/bior/utils"
 )
@@ -312,5 +313,33 @@ func (c *core) removeNode(nodeID uint64) {
 		}
 		c.nodes = c.nodes[:len(c.nodes)-1]
 		return
+	}
+}
+
+func (c *core) advanceReadOnly(ctx []byte) {
+	rss := c.readOnly.Advance(ctx)
+	for _, rs := range rss {
+		if rs.To == c.id {
+			log.Debugf("%d [term: %d] save read state: %d, %v",
+				c.id, c.term, rs.Index, rs.Context)
+
+			readState := read.ReadState{
+				Index:      rs.Index,
+				RequestCtx: rs.Context,
+			}
+
+			c.callback.saveReadState(&readState)
+		} else {
+			log.Debugf("%d [term: %d] redirect heartbeat response %d to %d %v",
+				c.id, c.term, rs.Index, rs.To, rs.Context)
+
+			redirect := raftpd.Message{
+				To:      rs.To,
+				MsgType: raftpd.MsgReadIndexResponse,
+				Index:   rs.Index,
+				Context: rs.Context,
+			}
+			c.send(&redirect)
+		}
 	}
 }
