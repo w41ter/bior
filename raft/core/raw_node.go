@@ -104,7 +104,6 @@ func (node *RawNode) Ready() Ready {
 	// clear all
 	node.commitEntries = make([]raftpd.Entry, 0)
 	node.messages = make([]raftpd.Message, 0)
-	node.readStates = make([]read.ReadState, 0)
 
 	return ready
 }
@@ -138,18 +137,22 @@ func (node *RawNode) readSnapshot() *raftpd.Snapshot {
 
 func (node *RawNode) drainReadState() []read.ReadState {
 	var readStates []read.ReadState
+	lastApplied := node.prevHS.Commit
 	if len(node.commitEntries) > 0 {
-		lastApplied := node.commitEntries[len(node.commitEntries)-1].Index
-		for i := 0; i < len(node.readStates); i++ {
-			if node.readStates[i].Index <= lastApplied {
-				continue
-			}
-			//save and drain read states.
-			readStates = make([]read.ReadState, 0, i)
-			copy(readStates, node.readStates)
-			length := copy(node.readStates[:i], node.readStates[i:])
-			node.readStates = node.readStates[:length]
+		waitCommitIdx := node.commitEntries[len(node.commitEntries)-1].Index
+		if lastApplied < waitCommitIdx {
+			lastApplied = waitCommitIdx
 		}
 	}
+	i := 0
+	for ; i < len(node.readStates); i++ {
+		if node.readStates[i].Index > lastApplied {
+			break
+		}
+	}
+	//save and drain read states.
+	readStates = make([]read.ReadState, i)
+	copy(readStates, node.readStates)
+	node.readStates = node.readStates[i:]
 	return readStates
 }

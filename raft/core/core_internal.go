@@ -61,9 +61,9 @@ func (c *core) becomeFollower(term, leaderID uint64) {
 	c.vote = leaderID
 
 	if leaderID != conf.InvalidID {
-		log.Infof("%v become %d's follower at %d", c.id, leaderID, c.term)
+		log.Debugf("%v become %d's follower at %d", c.id, leaderID, c.term)
 	} else {
-		log.Infof("%v become follower at %d, without leader", c.id, c.term)
+		log.Debugf("%v become follower at %d, without leader", c.id, c.term)
 	}
 }
 
@@ -83,7 +83,7 @@ func (c *core) becomeLeader() {
 
 	utils.Assert(c.vote == c.id, "leader will vote itself")
 
-	log.Infof("%v become leader at %d [firstIdx: %d, lastIdx: %d]",
+	log.Debugf("%v become leader at %d [firstIdx: %d, lastIdx: %d]",
 		c.id, c.term, c.log.FirstIndex(), c.log.LastIndex())
 }
 
@@ -97,7 +97,7 @@ func (c *core) becomeCandidate() {
 
 	c.resetNodesVoteState()
 
-	log.Infof("%v become candidate at %d", c.id, c.term)
+	log.Debugf("%v become candidate at %d", c.id, c.term)
 }
 
 func (c *core) becomePreCandidate() {
@@ -112,7 +112,7 @@ func (c *core) becomePreCandidate() {
 	// Becoming a pre-candidate changes our state,
 	// but doesn't change anything else. In particular it does not increase
 	// currentTerm or change votedFor.
-	log.Infof("%x became pre-candidate at term %d", c.id, c.term)
+	log.Debugf("%x became pre-candidate at term %d", c.id, c.term)
 }
 
 func (c *core) preCampaign() {
