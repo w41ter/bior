@@ -222,7 +222,7 @@ func (c *core) handleUnreachable(msg *raftpd.Message) {
 	node := c.getNodeByID(msg.From)
 
 	node.HandleUnreachable()
-	log.Infof("%x failed to send message to %x"+
+	log.Infof("%d failed to send message to %d"+
 		" because it is unreachable", c.id, msg.From)
 }
 
@@ -337,6 +337,7 @@ func (c *core) handleVoteResponse(msg *raftpd.Message) {
 	count := c.voteStateCount(peer.VoteGranted) + 1
 	if count >= c.quorum() {
 		if msg.MsgType == raftpd.MsgVoteResponse {
+			log.Infof("%d [term: %d] win campaign", c.id, c.term)
 			c.becomeLeader()
 			c.broadcastVictory()
 		} else {
@@ -384,19 +385,24 @@ func (c *core) broadcastAppend() {
 
 	log.Debugf("%d broadcast message at term: %d [%d, %d]",
 		c.id, c.term, firstIndex, lastIndex)
+	if c.quorum() <= 1 {
+		// there only one node in current cluster, so no responses will return,
+		// just commit all entries directly.
+		c.poll(lastIndex)
+	} else {
+		for i := 0; i < len(c.nodes); i++ {
+			node := c.nodes[i]
+			/* ignore paused node */
+			if node.IsPaused() {
+				continue
+			}
 
-	for i := 0; i < len(c.nodes); i++ {
-		node := c.nodes[i]
-		/* ignore paused node */
-		if node.IsPaused() {
-			continue
-		}
-
-		if node.NextIdx >= firstIndex {
-			c.sendAppend(node)
-		} else {
-			// send snapshot if we failed to get term or entries
-			c.sendSnapshot(node)
+			if node.NextIdx >= firstIndex {
+				c.sendAppend(node)
+			} else {
+				// send snapshot if we failed to get term or entries
+				c.sendSnapshot(node)
+			}
 		}
 	}
 }

@@ -247,6 +247,8 @@ func (c *core) Periodic(millsSinceLastPeriod int) {
 			c.becomeLeader()
 		}
 	}
+
+	c.applyEntries()
 }
 
 func (c *core) ProposeConfChange(cc *raftpd.ConfChange) (
