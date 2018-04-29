@@ -153,6 +153,9 @@ func (c *core) Propose(bytes []byte) (index uint64, term uint64, isLeader bool) 
 	// entries in its log; it only appends new entries. §5.3
 	c.log.Append([]raftpd.Entry{entry})
 
+	// broadcast append info immediately.
+	c.broadcastAppend()
+
 	return entry.Index, entry.Term, true
 }
 
@@ -272,6 +275,9 @@ func (c *core) ProposeConfChange(cc *raftpd.ConfChange) (
 	// Leader Append-Only: a leader never overwrites or deletes
 	// entries in its log; it only appends new entries. §5.3
 	c.log.Append([]raftpd.Entry{entry})
+
+	// broadcast append info immediately.
+	c.broadcastAppend()
 
 	return entry.Index, entry.Term, true
 }
