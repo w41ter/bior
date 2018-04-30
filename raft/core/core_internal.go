@@ -293,7 +293,8 @@ func (c *core) addNode(nodeID uint64) {
 	// Ignore any redundant addNode calls (which can happen because the
 	// initial bootstrapping entries are applied twice).
 	var node = c.getNodeByID(nodeID)
-	if node != nil {
+	if node != nil || c.id == nodeID {
+		/* do not add self to nodes */
 		return
 	}
 	lastIndex := c.log.LastIndex()

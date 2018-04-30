@@ -141,6 +141,7 @@ func (t ConfChangeType) String() string {
 }
 
 func init() {
-	gob.Register(Message{})
-	gob.Register(ConfChange{})
+	gob.Register(&Message{})
+	gob.Register(&ConfState{})
+	gob.Register(&ConfChange{})
 }

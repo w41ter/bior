@@ -65,8 +65,8 @@ type Snapshot struct {
 func (s *Snapshot) Reset() { *s = Snapshot{} }
 
 func init() {
-	gob.Register(Entry{})
-	gob.Register(SnapshotMetadata{})
-	gob.Register(Snapshot{})
-	gob.Register(HardState{})
+	gob.Register(&Entry{})
+	gob.Register(&SnapshotMetadata{})
+	gob.Register(&Snapshot{})
+	gob.Register(&HardState{})
 }

@@ -130,7 +130,8 @@ func (c *core) ReadHardState() raftpd.HardState {
 
 func (c *core) ReadConfState() raftpd.ConfState {
 	state := raftpd.ConfState{}
-	state.Nodes = make([]uint64, len(c.nodes))
+	state.Nodes = make([]uint64, len(c.nodes)+1)
+	state.Nodes[len(c.nodes)] = c.id
 	for i := 0; i < len(c.nodes); i++ {
 		state.Nodes[i] = c.nodes[i].ID
 	}

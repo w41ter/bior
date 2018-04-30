@@ -85,6 +85,10 @@ func (holder *LogHolder) offset() uint64 {
 }
 
 func (holder *LogHolder) validateConsistency() {
+	if utils.Debug == false {
+		return
+	}
+
 	if len(holder.entries) > 0 {
 		for i := 0; i < len(holder.entries)-1; i++ {
 			utils.Assert(holder.entries[i].Index+1 == holder.entries[i+1].Index,
